@@ -55,4 +55,4 @@ The v4.0 PUT endpoint (`/bpm/api/4.0/tasks/{number}`) returns error 76012 ("Iden
 
 ## Credential
 
-Uses APEX Web Credential `gcs_reports` (must have BPM admin privileges).
+Uses an APEX Web Credential with BPM admin privileges (static ID configured in package body).

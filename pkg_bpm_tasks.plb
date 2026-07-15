@@ -1,5 +1,8 @@
 CREATE OR REPLACE PACKAGE BODY pkg_bpm_tasks AS
 
+    gc_base_url   CONSTANT VARCHAR2(200) := 'https://ibzsjb-dev4.fa.ocs.oraclecloud.com';
+    gc_credential CONSTANT VARCHAR2(50)  := 'gcs_reports';
+
     -- =========================================================================
     -- REFRESH_TASKS  --  Full replace of bpm_workflow_tasks from BPM REST API
     -- =========================================================================
