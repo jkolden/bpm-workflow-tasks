@@ -1,6 +1,6 @@
 declare
     l_url       varchar2(4000) :=
-        'https://ibzsjb-dev4.fa.ocs.oraclecloud.com'
+        pkg_bicc_common.gc_fa_base_url
         || '/bpm/api/3.0/tasks/353153/attachments';
 
     l_boundary  varchar2(100) := '----OracleBpmBoundary7MA4YWxk';
@@ -112,8 +112,7 @@ begin
     l_response := apex_web_service.make_rest_request(
         p_url         => l_url,
         p_http_method => 'POST',
-        p_username    => 'gcs_reports',
-        p_password    => 'Gcsd*#SC543!',
+        p_credential_static_id => pkg_bpm_tasks.gc_credential,
         p_body_blob   => l_body
     );
 
