@@ -1,0 +1,12 @@
+# Test files
+sample-pdf.pdf
+test.json
+test.txt
+
+# OS
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# IDE
+.vscode/

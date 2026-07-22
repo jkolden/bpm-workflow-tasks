@@ -1,58 +1,95 @@
 # BPM Workflow Tasks
 
-Oracle APEX package for listing and acting on Fusion BPM approval tasks via the REST API.
+Oracle APEX application for managing Fusion BPM approval tasks via REST API. Provides a faceted search dashboard with inline detail panels for comments, attachments, and approval history -- plus the ability to take actions (approve, reject, reassign, etc.) directly from APEX.
 
-## Overview
+## Features
 
-Provides an APEX-based approval dashboard that displays all pending BPM workflow tasks and allows administrators to take action (approve, reject, reassign, acquire, etc.) directly from APEX.
+- **Task Dashboard** -- Faceted search page (6004) displaying all pending BPM workflow tasks with status, assignee, priority, and days pending
+- **Inline Detail Panel** -- Expand/collapse panel per task row showing comments and attachments fetched live from the BPM API
+- **Add Comments** -- Post comments to tasks directly from the panel (Ctrl+Enter to submit)
+- **Upload Attachments** -- Upload files to tasks via multipart/mixed POST with client-side 10 MB guard
+- **Download Attachments** -- Download attachment files via streaming proxy (base64 decode in browser)
+- **Approval History** -- Separate toggle column showing the full approval chain with action, approver, state, and timestamps; future participants are visually dimmed
+- **Task Actions** -- Approve, reject, reassign, acquire, delegate, or push back tasks with optional comments
+- **Create Todo Tasks** -- Drawer form (page 6104) to create standalone todo tasks in assignees' BPM inboxes
+- **Incremental Refresh** -- Orders by `updatedDate desc` and stops paging once caught up, minimizing API calls on subsequent syncs
 
 ## Files
 
 | File | Description |
 |---|---|
 | `bpm_workflow_tasks.sql` | Table DDL -- stores task metadata + action audit trail |
+| `bpm_task_statuses.sql` | Lookup table for tracking status values |
 | `pkg_bpm_tasks.sql` | Package spec |
 | `pkg_bpm_tasks.plb` | Package body |
+| `bpm_task_detail_js.js` | JavaScript -- toggle panels, fetch/render comments, attachments, history; upload/download handlers |
+| `bpm_task_detail_css.css` | Styles -- detail panel (teal), history panel (purple), responsive layout |
+| `bpm_task_detail_apex.sql` | APEX setup instructions + Ajax callback PL/SQL for page 6004 |
+| `f121_page_6004.sql` | APEX page export (faceted search) |
+| `add attachment.sql` | Standalone attachment upload script (reference/testing) |
+| `kanban_board.css` | Kanban board styles (deprecated -- client chose faceted search) |
+| `bpm_task_cards.sql` | Kanban card query (deprecated) |
 
-## API Endpoints
+## API Endpoints Used
 
-- **GET** `/bpm/api/4.0/tasks?assignment=ADMIN&status=ASSIGNED` -- list all pending tasks (paginated)
-- **GET** `/bpm/api/4.0/tasks/{number}` -- single task detail with `actionList`
-- **PUT** `/bpm/api/3.0/tasks` -- act on tasks (v3.0 required; v4.0 PUT returns error 76012)
+| Method | Endpoint | Version | Purpose |
+|---|---|---|---|
+| GET | `/bpm/api/4.0/tasks` | 4.0 | List tasks (paginated, with `orderBy`) |
+| GET | `/bpm/api/4.0/tasks/{number}` | 4.0 | Single task detail with `actionList` |
+| GET | `/bpm/api/4.0/tasks/{number}/comments` | 4.0 | Fetch comments |
+| GET | `/bpm/api/4.0/tasks/{number}/attachments` | 4.0 | Fetch attachment metadata |
+| GET | `/bpm/api/4.0/tasks/{number}/attachments/{name}/stream` | 4.0 | Download attachment bytes |
+| GET | `/bpm/api/4.0/tasks/{number}/history` | 4.0 | Approval history chain |
+| POST | `/bpm/api/3.0/tasks/{number}/comments` | 3.0 | Add comment |
+| POST | `/bpm/api/3.0/tasks/{number}/attachments` | 3.0 | Upload attachment (multipart/mixed) |
+| POST | `/bpm/api/3.0/tasks/todoTask` | 3.0 | Create standalone todo task |
+| PUT | `/bpm/api/4.0/tasks/{number}` | 4.0 | ACQUIRE action only |
+| PUT | `/bpm/api/3.0/tasks` | 3.0 | All other actions (APPROVE, REJECT, REASSIGN, etc.) |
 
-## Package Procedures
+## Package Procedures & Functions
 
 ### `refresh_tasks(p_status, p_assignment)`
-
-Paginates the GET endpoint and MERGEs results into `bpm_workflow_tasks`. Preserves `last_action_*` columns between refreshes.
+Incremental sync -- paginates the task list ordered by `updatedDate desc`, MERGEs into `bpm_workflow_tasks`, and exits early once it reaches tasks already synced. First run fetches everything. Preserves `last_action_*` and `tracking_status` columns between refreshes.
 
 ### `action_task(p_task_number, p_action, p_comment, p_assignee_id, p_assignee_type)`
+Validates the action against the task's `actionList`, then routes ACQUIRE to the 4.0 single-task endpoint and all other actions to the 3.0 bulk endpoint. Logs results to audit columns.
 
-1. Fetches the task's `actionList` via v4.0 GET to validate the requested action
-2. Raises `-20001` if the action is not permitted
-3. Sends the action via v3.0 PUT
-4. Logs the result to `last_action_*` columns on the table
+### `get_comments(p_task_number) RETURN CLOB`
+Returns raw JSON from the 4.0 comments endpoint.
 
-Supported actions: `APPROVE`, `REJECT`, `REASSIGN`, `ACQUIRE`, `DELEGATE`, `PUSHBACK`, etc.
+### `add_comment(p_task_number, p_comment)`
+Posts a comment via the 3.0 API.
 
-## v3.0 vs v4.0
+### `get_attachments(p_task_number) RETURN CLOB`
+Returns raw JSON from the 4.0 attachments endpoint.
 
-The v4.0 PUT endpoint (`/bpm/api/4.0/tasks/{number}`) returns error 76012 ("Identity service cannot get users when identities' size crosses limit") on all write operations. The v3.0 PUT endpoint works correctly with a different payload format:
+### `add_attachment(p_task_number, p_file_name, p_content_type, p_file_b64)`
+Decodes base64 CLOB to BLOB, builds multipart/mixed body, POSTs via 3.0 API.
 
-```json
-{
-  "tasks": ["230089"],
-  "action": { "id": "REASSIGN" },
-  "comment": { "commentStr": "Reassigned via API.", "commentScope": "TASK" },
-  "identities": [{ "id": "user@example.com", "type": "user" }]
-}
-```
+### `get_history(p_task_number) RETURN CLOB`
+Returns raw JSON from the 4.0 history endpoint.
 
-## APEX Pages
+### `create_todo_task(p_title, p_assignee_id, p_priority, p_start_date, p_due_date)`
+Creates a standalone todo task in the assignee's BPM inbox via the 3.0 API.
 
-- **Page 6002** -- Parent page with IRR displaying pending tasks + Refresh button
-- **Page 6003** -- Modal dialog for task actions (Ajax callback pattern with inline error display)
+## APEX Setup
+
+See `bpm_task_detail_apex.sql` for step-by-step instructions:
+
+1. Compile `pkg_bpm_tasks.sql` (spec) then `pkg_bpm_tasks.plb` (body)
+2. Upload `bpm_task_detail_js.js` and `bpm_task_detail_css.css` to Static Application Files
+3. Reference on page 6004 as `#APP_FILES#bpm_task_detail_js#MIN#.js` / `#APP_FILES#bpm_task_detail_css#MIN#.css`
+4. Add `DETAIL_TOGGLE` and `HISTORY_TOGGLE` columns to report SQL (Escape Special Characters = No)
+5. Create six Ajax Callback processes: `GET_TASK_COMMENTS`, `GET_TASK_ATTACHMENTS`, `ADD_TASK_COMMENT`, `ADD_TASK_ATTACHMENT`, `DOWNLOAD_TASK_ATTACHMENT`, `GET_TASK_HISTORY`
+6. Create drawer page 6104 for New Todo with `CREATE_TODO_TASK` process
+
+## v3.0 vs v4.0 Notes
+
+- **GETs use 4.0** -- richer JSON shape, supports `orderBy`, `history` sub-resource
+- **POSTs/PUTs use 3.0** -- the v4.0 PUT endpoint returns error 76012 on most write operations
+- **Exception: ACQUIRE** -- only works on 4.0 with `PUT /tasks/{number}` and body `{"action":{"id":"ACQUIRE"}}`
+- **BPM API quirks**: `updatedAfter` query parameter is silently ignored; `updatedDate` in comments JSON is misspelled as `updateddDate` (double "d")
 
 ## Credential
 
-Uses an APEX Web Credential with BPM admin privileges (static ID configured in package body).
+Uses an APEX Web Credential (static ID configured as `gc_credential` in the package). Base URL is sourced from `pkg_bicc_common.gc_fa_base_url`.

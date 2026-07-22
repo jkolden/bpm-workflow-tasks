@@ -1,0 +1,311 @@
+/* ==========================================================================
+   BPM Task Detail — Inline Expand/Collapse
+   Combined comments + attachments panel for page 6004.
+   Uses "btask-" prefix to avoid collisions.
+   ========================================================================== */
+
+/* --- Detail row injected below a task row --- */
+.btask-detail-row > td {
+    padding: 4px 8px !important;
+    background: transparent !important;
+    border: none !important;
+}
+
+.btask-panel {
+    padding: 0;
+    background: var(--ut-component-background-color, #fff);
+    border: 2px solid var(--ut-palette-primary, #0572CE);
+    border-radius: 8px;
+    max-width: 700px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+    overflow: hidden;
+}
+
+/* --- Header — colored banner --- */
+.btask-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 16px;
+    background: var(--ut-palette-primary, #0572CE);
+    color: #fff;
+}
+
+.btask-title {
+    font-size: 14px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #fff;
+}
+
+.btask-close {
+    color: rgba(255, 255, 255, 0.8) !important;
+}
+
+.btask-close:hover {
+    color: #fff !important;
+}
+
+/* --- Body content area --- */
+.btask-body {
+    padding: 14px 16px 16px;
+}
+
+/* --- Section dividers --- */
+.btask-section {
+    margin-bottom: 12px;
+}
+
+.btask-section + .btask-section {
+    border-top: 2px solid var(--ut-component-border-color, #e5e7eb);
+    padding-top: 12px;
+}
+
+.btask-section-title {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+}
+
+/* Comments section title — blue accent */
+.btask-section:first-child .btask-section-title {
+    color: var(--ut-palette-primary, #0572CE);
+}
+
+/* Attachments section title — teal accent */
+.btask-section + .btask-section .btask-section-title {
+    color: #0d9488;
+}
+
+/* --- Add-comment form --- */
+.btask-add-comment {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    margin-bottom: 10px;
+}
+
+.btask-comment-input {
+    flex: 1;
+    padding: 8px 10px;
+    border: 1px solid var(--ut-component-border-color, #d0d5dd);
+    border-radius: 6px;
+    font-size: 13px;
+    font-family: inherit;
+    resize: vertical;
+    min-height: 50px;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.btask-comment-input:focus {
+    outline: none;
+    border-color: var(--ut-palette-primary, #0572CE);
+    box-shadow: 0 0 0 2px rgba(5, 114, 206, 0.15);
+}
+
+/* --- Comment list --- */
+.btask-comment-list {
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.btask-comment-entry {
+    padding: 8px 12px;
+    border-left: 3px solid var(--ut-palette-primary, #0572CE);
+    margin-bottom: 6px;
+    background: linear-gradient(135deg, #f0f7ff 0%, #fff 100%);
+    border-radius: 0 6px 6px 0;
+}
+
+.btask-meta {
+    font-size: 11px;
+    color: var(--ut-component-text-muted-color, #6b7280);
+    margin-bottom: 3px;
+}
+.btask-meta::before {
+    content: "\f0e5";
+    font-family: "Font APEX Large";
+    margin-right: 4px;
+    font-size: 10px;
+}
+
+.btask-text {
+    font-size: 13px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: var(--ut-component-text-default-color, #1f2937);
+}
+
+/* --- Upload form --- */
+.btask-add-attach {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.btask-file-input {
+    flex: 1;
+    font-size: 13px;
+}
+
+/* --- Attachment list --- */
+.btask-attach-list {
+    max-height: 150px;
+    overflow-y: auto;
+}
+
+.btask-attach-entry {
+    padding: 6px 10px;
+    margin-bottom: 4px;
+    font-size: 13px;
+    background: linear-gradient(135deg, #f0fdfa 0%, #fff 100%);
+    border-radius: 6px;
+    border: 1px solid #ccfbf1;
+    transition: background 0.15s;
+}
+
+.btask-attach-entry:hover {
+    background: linear-gradient(135deg, #ccfbf1 0%, #f0fdfa 100%);
+}
+
+.btask-attach-icon {
+    color: #0d9488;
+    margin-right: 4px;
+}
+
+a.btask-attach-name {
+    font-weight: 600;
+    color: #0d9488;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+a.btask-attach-name:hover {
+    text-decoration: underline;
+    color: #0f766e;
+}
+
+.btask-attach-meta {
+    font-size: 11px;
+    color: var(--ut-component-text-muted-color, #6b7280);
+}
+
+/* --- History panel (standalone) --- */
+.btask-history-row > td {
+    padding: 4px 8px !important;
+    background: transparent !important;
+    border: none !important;
+}
+
+.btask-history-panel {
+    padding: 0;
+    background: var(--ut-component-background-color, #fff);
+    border: 2px solid #7c3aed;
+    border-radius: 8px;
+    max-width: 500px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+    overflow: hidden;
+}
+
+.btask-header-history {
+    background: #7c3aed;
+}
+
+.btask-history-list {
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.btask-history-entry {
+    padding: 6px 10px;
+    margin-bottom: 4px;
+    font-size: 13px;
+    background: linear-gradient(135deg, #f5f3ff 0%, #fff 100%);
+    border-radius: 6px;
+    border-left: 3px solid #7c3aed;
+}
+
+.btask-history-future {
+    opacity: 0.55;
+    border-left-color: #d1d5db;
+    background: linear-gradient(135deg, #f9fafb 0%, #fff 100%);
+}
+
+.btask-history-who {
+    font-weight: 600;
+    color: var(--ut-component-text-default-color, #1f2937);
+}
+
+.btask-history-action {
+    font-weight: 400;
+    color: #7c3aed;
+    font-style: italic;
+}
+
+.btask-history-detail {
+    font-size: 11px;
+    color: var(--ut-component-text-muted-color, #6b7280);
+    margin-top: 2px;
+}
+
+.btask-history-state {
+    font-weight: 600;
+}
+
+/* --- Shared states --- */
+.btask-empty {
+    font-size: 13px;
+    color: var(--ut-component-text-muted-color, #6b7280);
+    font-style: italic;
+    padding: 4px 0;
+}
+
+.btask-loading {
+    padding: 20px 12px;
+    text-align: center;
+    color: var(--ut-palette-primary, #0572CE);
+    font-size: 14px;
+}
+
+.btask-error {
+    padding: 8px 12px;
+    color: var(--ut-palette-danger, #d92d20);
+    background: #fef2f2;
+    border-radius: 4px;
+    border-left: 3px solid var(--ut-palette-danger, #d92d20);
+}
+
+/* --- Toggle button --- */
+.btask-toggle {
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 4px 8px;
+    font-size: 16px;
+    color: var(--ut-palette-primary, #0572CE);
+    transition: transform 0.15s;
+}
+
+.btask-toggle:hover {
+    color: #0f766e;
+    transform: scale(1.15);
+}
+
+.btask-history-toggle {
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 4px 8px;
+    font-size: 16px;
+    color: #7c3aed;
+    transition: transform 0.15s;
+}
+
+.btask-history-toggle:hover {
+    color: #5b21b6;
+    transform: scale(1.15);
+}
