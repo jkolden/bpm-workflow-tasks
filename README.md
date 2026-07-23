@@ -5,7 +5,8 @@ Oracle APEX application for managing Fusion BPM approval tasks via REST API. Pro
 ## Features
 
 - **Task Dashboard** -- Faceted search page (6004) displaying all pending BPM workflow tasks with status, assignee, priority, and days pending
-- **Inline Detail Panel** -- Expand/collapse panel per task row showing comments and attachments fetched live from the BPM API
+- **Inline Detail Panel** -- Expand/collapse panel per task row showing task payload details, comments, and attachments fetched live from the BPM API
+- **Task Payload Details** -- Amber "Details" section showing business-relevant fields parsed from the raw BPM XML payload, keyed per `task_def_name` (AP invoices, HCM changes, absences, timecards, requisitions, etc.)
 - **Add Comments** -- Post comments to tasks directly from the panel (Ctrl+Enter to submit)
 - **Upload Attachments** -- Upload files to tasks via multipart/mixed POST with client-side 10 MB guard
 - **Download Attachments** -- Download attachment files via streaming proxy (base64 decode in browser)
@@ -36,6 +37,7 @@ Oracle APEX application for managing Fusion BPM approval tasks via REST API. Pro
 |---|---|---|---|
 | GET | `/bpm/api/4.0/tasks` | 4.0 | List tasks (paginated, with `orderBy`) |
 | GET | `/bpm/api/4.0/tasks/{number}` | 4.0 | Single task detail with `actionList` |
+| GET | `/bpm/api/4.0/tasks/{number}/payload` | 4.0 | Raw XML payload (business context fields) |
 | GET | `/bpm/api/4.0/tasks/{number}/comments` | 4.0 | Fetch comments |
 | GET | `/bpm/api/4.0/tasks/{number}/attachments` | 4.0 | Fetch attachment metadata |
 | GET | `/bpm/api/4.0/tasks/{number}/attachments/{name}/stream` | 4.0 | Download attachment bytes |
@@ -69,6 +71,22 @@ Decodes base64 CLOB to BLOB, builds multipart/mixed body, POSTs via 3.0 API.
 ### `get_history(p_task_number) RETURN CLOB`
 Returns raw JSON from the 4.0 history endpoint.
 
+### `get_payload(p_task_number) RETURN CLOB`
+Returns raw XML CLOB from the 4.0 payload endpoint (`/tasks/{number}/payload`).
+
+### `emit_payload_fields(p_task_number)`
+Parses the raw XML payload and emits `apex_json` `{label, value}` objects for business-relevant fields. Called from the `GET_TASK_PAYLOAD` Ajax callback with an `apex_json` array already open. Branches per `task_def_name` using XMLTABLE with per-namespace parsing. Covered task types:
+
+| `task_def_name` | Fields emitted |
+|---|---|
+| `FinApInvoiceApproval` | Supplier, Invoice #, Amount, Currency, Invoice Date, Description |
+| `FinApIncompleteInvoiceHold` | Hold Name, Invoice #, Requestor |
+| `TransfersApproval`, `PromotionsApproval`, `ChangeSalaryApprovalTask`, `TerminationsApproval`, `ChangeAssignmentApproval` | Worker, Action, Effective Date, Position, Department, Business Unit |
+| `RequestNewPositionApproval` | Position, Department, Business Unit, Effective Date |
+| `AbsencesApprovalsTask` | Person, Absence Type, Start Date, End Date, Duration |
+| `TimecardApprovalELA` | Consumer Code, Period Start, Period End, Total Hours |
+| `ReqStatusFYI`, `DocumentOpenFyi` | (FYI notifications -- no payload fields extracted) |
+
 ### `create_todo_task(p_title, p_assignee_id, p_priority, p_start_date, p_due_date)`
 Creates a standalone todo task in the assignee's BPM inbox via the 3.0 API.
 
@@ -80,12 +98,12 @@ See `bpm_task_detail_apex.sql` for step-by-step instructions:
 2. Upload `bpm_task_detail_js.js` and `bpm_task_detail_css.css` to Static Application Files
 3. Reference on page 6004 as `#APP_FILES#bpm_task_detail_js#MIN#.js` / `#APP_FILES#bpm_task_detail_css#MIN#.css`
 4. Add `DETAIL_TOGGLE` and `HISTORY_TOGGLE` columns to report SQL (Escape Special Characters = No)
-5. Create six Ajax Callback processes: `GET_TASK_COMMENTS`, `GET_TASK_ATTACHMENTS`, `ADD_TASK_COMMENT`, `ADD_TASK_ATTACHMENT`, `DOWNLOAD_TASK_ATTACHMENT`, `GET_TASK_HISTORY`
+5. Create seven Ajax Callback processes: `GET_TASK_PAYLOAD`, `GET_TASK_COMMENTS`, `GET_TASK_ATTACHMENTS`, `ADD_TASK_COMMENT`, `ADD_TASK_ATTACHMENT`, `DOWNLOAD_TASK_ATTACHMENT`, `GET_TASK_HISTORY`
 6. Create drawer page 6104 for New Todo with `CREATE_TODO_TASK` process
 
 ## v3.0 vs v4.0 Notes
 
-- **GETs use 4.0** -- richer JSON shape, supports `orderBy`, `history` sub-resource
+- **GETs use 4.0** -- richer JSON shape, supports `orderBy`, `history` and `payload` sub-resources
 - **POSTs/PUTs use 3.0** -- the v4.0 PUT endpoint returns error 76012 on most write operations
 - **Exception: ACQUIRE** -- only works on 4.0 with `PUT /tasks/{number}` and body `{"action":{"id":"ACQUIRE"}}`
 - **BPM API quirks**: `updatedAfter` query parameter is silently ignored; `updatedDate` in comments JSON is misspelled as `updateddDate` (double "d")
