@@ -6,7 +6,8 @@ create or replace PACKAGE pkg_bpm_tasks AS
 -- Credential: gcs_reports (APEX Web Credential, Basic Auth to dev4)
 -- =============================================================================
 
-    gc_credential CONSTANT VARCHAR2(50)  := 'gcs_reports';
+    gc_credential      CONSTANT VARCHAR2(50) := 'gcs_reports';
+    gc_user_credential CONSTANT VARCHAR2(50) := 'CONFIGURE_ME'; -- set to Fusion Auth user cred static ID
 
     ---------------------------------------------------------------------------
     -- Refresh bpm_workflow_tasks with all pending tasks (full replace)
@@ -20,10 +21,8 @@ create or replace PACKAGE pkg_bpm_tasks AS
     -- Act on a task: APPROVE, REJECT, ACQUIRE, REASSIGN, DELEGATE, etc.
     -- Logs result to last_action_* columns on bpm_workflow_tasks.
     -- p_assignee_id / p_assignee_type only needed for REASSIGN / DELEGATE.
-    -- p_credential_id: APEX Web Credential static ID to use for both the
-    --   actionList pre-check GET and the action PUT.  Pass the user's own
-    --   credential so the BPM audit trail records the real approver.
-    --   Defaults to gc_credential (admin fallback) when NULL.
+    -- Uses gc_user_credential internally so the BPM audit trail records the
+    -- real approver.  p_credential_id overrides when supplied (optional).
     ---------------------------------------------------------------------------
     PROCEDURE action_task(
         p_task_number   IN NUMBER,
@@ -33,6 +32,13 @@ create or replace PACKAGE pkg_bpm_tasks AS
         p_assignee_type IN VARCHAR2 DEFAULT 'user',
         p_credential_id IN VARCHAR2 DEFAULT NULL
     );
+
+    ---------------------------------------------------------------------------
+    -- Return raw task JSON for a single task  (4.0 API)
+    -- Called by the GET_TASK_ACTIONS Ajax callback to extract actionList.
+    -- Uses gc_user_credential so BPM returns only that user's valid actions.
+    ---------------------------------------------------------------------------
+    FUNCTION get_task_actions(p_task_number IN NUMBER) RETURN CLOB;
 
     ---------------------------------------------------------------------------
     -- Return comments JSON for a single task  (on-demand from detail drawer)

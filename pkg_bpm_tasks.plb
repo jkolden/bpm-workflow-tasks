@@ -259,6 +259,28 @@ create or replace PACKAGE BODY pkg_bpm_tasks AS
     END action_task;
 
     -- =========================================================================
+    -- GET_TASK_ACTIONS  --  Fetch task detail JSON for a single task  (4.0 API)
+    -- Returns raw JSON CLOB; caller parses $.actionList[*].actionId.
+    -- Uses gc_user_credential so BPM reflects the logged-in user's permissions.
+    -- =========================================================================
+
+    FUNCTION get_task_actions(p_task_number IN NUMBER) RETURN CLOB IS
+        l_url      VARCHAR2(1000);
+        l_response CLOB;
+    BEGIN
+        l_url := pkg_bicc_common.gc_fa_base_url || '/bpm/api/4.0/tasks/' || p_task_number;
+
+        l_response := apex_web_service.make_rest_request(
+            p_url                  => l_url,
+            p_http_method          => 'GET',
+            p_credential_static_id => gc_user_credential
+        );
+
+        RETURN l_response;
+    END get_task_actions;
+
+
+    -- =========================================================================
     -- GET_COMMENTS  --  Fetch comments for a single task  (4.0 API)
     -- Returns raw JSON CLOB for the APEX page to parse and render.
     -- =========================================================================

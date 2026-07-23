@@ -421,18 +421,15 @@ END;
 -- =============================================================================
 -- Page 6003 lets the user take an action on a task.
 -- The P6003_ACTION select list is populated dynamically by GET_TASK_ACTIONS,
--- which fetches the task from the 4.0 API using the USER'S credential — so the
+-- which fetches the task from the 4.0 API using gc_user_credential — so the
 -- actionList reflects what that specific user is permitted to do on that task.
--- The ACTION_TASK submit also passes the user credential through to action_task,
--- so the BPM audit trail records the real approver, not the admin account.
+-- The ACTION_TASK submit uses the same credential so the BPM audit trail records
+-- the real approver. Both credentials are controlled at the package level only.
 --
 -- Page items required on page 6003:
 --   P6003_TASK_NUMBER  - Hidden, stores task number
 --   P6003_ACTION       - Select List (static placeholder LOV, replaced at runtime)
 --   P6003_COMMENT      - Text Area (optional comment)
---   P6003_CREDENTIAL   - Hidden, stores the user's APEX Web Credential static ID
---                        Set this before opening the modal (e.g. from a session
---                        item or application item that maps to the user's cred).
 --
 -- P6003_ACTION configuration:
 --   Type:           Select List
@@ -443,25 +440,15 @@ END;
 -- Name: GET_TASK_ACTIONS
 -- Ajax Callback on page 6003.
 -- x01 = task number
--- x02 = credential static ID (user's credential; falls back to gc_credential if blank)
 -- Returns { status, actions: [...] } — only the actionList for that user/task.
+-- Uses gc_user_credential so BPM returns actions valid for the logged-in user.
 
 /*
 DECLARE
-    l_task_number NUMBER        := TO_NUMBER(apex_application.g_x01);
-    l_cred        VARCHAR2(50)  := NVL(NULLIF(apex_application.g_x02, ''),
-                                       pkg_bpm_tasks.gc_credential);
-    l_url         VARCHAR2(1000);
+    l_task_number NUMBER := TO_NUMBER(apex_application.g_x01);
     l_response    CLOB;
 BEGIN
-    l_url := pkg_bicc_common.gc_fa_base_url
-           || '/bpm/api/4.0/tasks/' || l_task_number;
-
-    l_response := apex_web_service.make_rest_request(
-        p_url                  => l_url,
-        p_http_method          => 'GET',
-        p_credential_static_id => l_cred
-    );
+    l_response := pkg_bpm_tasks.get_task_actions(l_task_number);
 
     apex_json.open_object;
     apex_json.write('status', 'OK');
@@ -493,21 +480,18 @@ END;
 -- x01 = task number
 -- x02 = action (APPROVE, REJECT, ACQUIRE, etc.)
 -- x03 = comment (optional)
--- x04 = credential static ID (user's credential)
+-- Credential is controlled entirely by gc_user_credential in the package.
 
 /*
 DECLARE
     l_task_number NUMBER         := TO_NUMBER(apex_application.g_x01);
     l_action      VARCHAR2(50)   := apex_application.g_x02;
     l_comment     VARCHAR2(4000) := SUBSTRB(apex_application.g_x03, 1, 4000);
-    l_cred        VARCHAR2(50)   := NVL(NULLIF(apex_application.g_x04, ''),
-                                        pkg_bpm_tasks.gc_credential);
 BEGIN
     pkg_bpm_tasks.action_task(
-        p_task_number   => l_task_number,
-        p_action        => l_action,
-        p_comment       => l_comment,
-        p_credential_id => l_cred
+        p_task_number => l_task_number,
+        p_action      => l_action,
+        p_comment     => l_comment
     );
 
     apex_json.open_object;
@@ -525,16 +509,13 @@ END;
 
 
 -- ---- Page 6003: Execute when Page Loads (JavaScript) ----
--- Reads P6003_CREDENTIAL (user's credential static ID) and passes it to
--- GET_TASK_ACTIONS as x02.  The credential governs which actions are shown.
--- The same credential is passed to ACTION_TASK on submit.
+-- Fetches the action list for the task via GET_TASK_ACTIONS.
+-- Credentials are controlled entirely at the package level (gc_user_credential).
 
 /*
 (function () {
     var taskNum = $v('P6003_TASK_NUMBER');
     if (!taskNum) return;
-
-    var cred = $v('P6003_CREDENTIAL') || '';
 
     // Whitelist: only actions we have tested and built payloads for.
     // Intersected with the API actionList so only valid-for-state options appear.
@@ -554,7 +535,7 @@ END;
     var sel = apex.item('P6003_ACTION').node;
     sel.innerHTML = '<option value="" disabled selected>Select an Action\u2026</option>';
 
-    apex.server.process('GET_TASK_ACTIONS', { x01: taskNum, x02: cred }, {
+    apex.server.process('GET_TASK_ACTIONS', { x01: taskNum }, {
         success: function (data) {
             if (data.status !== 'OK' || !data.actions || !data.actions.length) return;
 
@@ -585,7 +566,6 @@ END;
         }
     });
 
-    // On submit: pass credential through to ACTION_TASK callback
     $(document).on('click', '#P6003_SUBMIT', function () {
         var action  = $v('P6003_ACTION');
         var comment = $v('P6003_COMMENT') || '';
@@ -593,7 +573,7 @@ END;
             message: 'Please select an action.' }]); return; }
 
         apex.server.process('ACTION_TASK',
-            { x01: taskNum, x02: action, x03: comment, x04: cred },
+            { x01: taskNum, x02: action, x03: comment },
             {
                 success: function (data) {
                     if (data.status === 'OK') {
@@ -622,10 +602,10 @@ END;
 -- Credentials:
 --   Read-only calls (GET_TASK_PAYLOAD, GET_TASK_COMMENTS, GET_TASK_ATTACHMENTS,
 --   GET_TASK_HISTORY, DOWNLOAD_TASK_ATTACHMENT): use gc_credential (admin, gcs_reports).
---   User-action calls (GET_TASK_ACTIONS, ACTION_TASK): pass P6003_CREDENTIAL so the
+--   User-action calls (GET_TASK_ACTIONS, ACTION_TASK): use gc_user_credential so the
 --   BPM actionList and audit trail reflect the real user, not the admin account.
---   P6003_CREDENTIAL should be populated from an app/session item that holds the
---   logged-in user's APEX Web Credential static ID before page 6003 is opened.
+--   Both constants are defined in pkg_bpm_tasks — no page items or client-side
+--   credential-passing required.
 --
 -- Download: DOWNLOAD_TASK_ATTACHMENT fetches /stream as BLOB, returns base64
 -- via apex_json. JS decodes to Blob and triggers browser download.

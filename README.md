@@ -29,28 +29,28 @@ Oracle APEX application for managing Fusion BPM approval tasks via REST API. Pro
 
 ## API Endpoints Used
 
-| Method | Endpoint | Version | Purpose |
-|---|---|---|---|
-| GET | `/bpm/api/4.0/tasks` | 4.0 | List tasks (paginated, with `orderBy`) |
-| GET | `/bpm/api/4.0/tasks/{number}` | 4.0 | Single task detail with `actionList` |
-| GET | `/bpm/api/4.0/tasks/{number}/payload` | 4.0 | Raw XML payload (business context fields) |
-| GET | `/bpm/api/4.0/tasks/{number}/comments` | 4.0 | Fetch comments |
-| GET | `/bpm/api/4.0/tasks/{number}/attachments` | 4.0 | Fetch attachment metadata |
-| GET | `/bpm/api/4.0/tasks/{number}/attachments/{name}/stream` | 4.0 | Download attachment bytes |
-| GET | `/bpm/api/4.0/tasks/{number}/history` | 4.0 | Approval history chain |
-| POST | `/bpm/api/3.0/tasks/{number}/comments` | 3.0 | Add comment |
-| POST | `/bpm/api/3.0/tasks/{number}/attachments` | 3.0 | Upload attachment (multipart/mixed) |
-| POST | `/bpm/api/3.0/tasks/todoTask` | 3.0 | Create standalone todo task |
-| PUT | `/bpm/api/4.0/tasks/{number}` | 4.0 | ACQUIRE action only |
-| PUT | `/bpm/api/3.0/tasks` | 3.0 | All other actions (APPROVE, REJECT, REASSIGN, etc.) |
+| Method | Endpoint | Version | Credential | Purpose |
+|---|---|---|---|---|
+| GET | `/bpm/api/4.0/tasks` | 4.0 | `gc_credential` | List tasks (paginated, with `orderBy`) |
+| GET | `/bpm/api/4.0/tasks/{number}` | 4.0 | `gc_credential` | Single task detail with `actionList` |
+| GET | `/bpm/api/4.0/tasks/{number}/payload` | 4.0 | `gc_credential` | Raw XML payload (business context fields) |
+| GET | `/bpm/api/4.0/tasks/{number}/comments` | 4.0 | `gc_credential` | Fetch comments |
+| GET | `/bpm/api/4.0/tasks/{number}/attachments` | 4.0 | `gc_credential` | Fetch attachment metadata |
+| GET | `/bpm/api/4.0/tasks/{number}/attachments/{name}/stream` | 4.0 | `gc_credential` | Download attachment bytes |
+| GET | `/bpm/api/4.0/tasks/{number}/history` | 4.0 | `gc_credential` | Approval history chain |
+| POST | `/bpm/api/3.0/tasks/{number}/comments` | 3.0 | `gc_credential` | Add comment |
+| POST | `/bpm/api/3.0/tasks/{number}/attachments` | 3.0 | `gc_credential` | Upload attachment (multipart/mixed) |
+| POST | `/bpm/api/3.0/tasks/todoTask` | 3.0 | `gc_credential` | Create standalone todo task |
+| PUT | `/bpm/api/4.0/tasks/{number}` | 4.0 | `gc_credential` | ACQUIRE action only |
+| PUT | `/bpm/api/3.0/tasks` | 3.0 | `gc_credential` | All other actions (APPROVE, REJECT, REASSIGN, etc.) |
 
 ## Package Procedures & Functions
 
 ### `refresh_tasks(p_status, p_assignment)`
 Incremental sync -- paginates the task list ordered by `updatedDate desc`, MERGEs into `bpm_workflow_tasks`, and exits early once it reaches tasks already synced. First run fetches everything. Preserves `last_action_*` and `tracking_status` columns between refreshes.
 
-### `action_task(p_task_number, p_action, p_comment, p_assignee_id, p_assignee_type)`
-Validates the action against the task's `actionList`, then routes ACQUIRE to the 4.0 single-task endpoint and all other actions to the 3.0 bulk endpoint. Logs results to audit columns.
+### `action_task(p_task_number, p_action, p_comment, p_assignee_id, p_assignee_type, p_credential_id)`
+Validates the action against the task's `actionList`, then routes ACQUIRE to the 4.0 single-task endpoint and all other actions to the 3.0 bulk endpoint. Logs results to audit columns. Both the pre-check GET and the action PUT use `p_credential_id` (falls back to `gc_credential` when NULL) so the BPM audit trail records the real approver.
 
 ### `get_comments(p_task_number) RETURN CLOB`
 Returns raw JSON from the 4.0 comments endpoint.
@@ -104,6 +104,28 @@ See `bpm_task_detail_apex.sql` for step-by-step instructions:
 - **Exception: ACQUIRE** -- only works on 4.0 with `PUT /tasks/{number}` and body `{"action":{"id":"ACQUIRE"}}`
 - **BPM API quirks**: `updatedAfter` query parameter is silently ignored; `updatedDate` in comments JSON is misspelled as `updateddDate` (double "d")
 
-## Credential
+## Credential Strategy
 
-Uses an APEX Web Credential (static ID configured as `gc_credential` in the package). Base URL is sourced from `pkg_bicc_common.gc_fa_base_url`.
+Two APEX Web Credentials are defined as package-level constants:
+
+| Constant | Default | Role |
+|---|---|---|
+| `gc_credential` | `gcs_reports` | Admin service account — used for all read-only GETs |
+| `gc_user_credential` | *(configure)* | Logged-in user's Fusion token — used where user identity matters |
+
+### Why two credentials?
+
+**Read-only operations** (`refresh_tasks`, `get_comments`, `get_payload`, `get_history`, `get_attachments`, attachment download) use `gc_credential`. The admin account can see all tasks in the system regardless of assignee, which is exactly what the dashboard sync and detail panel reads need.
+
+**User-identity operations** must use `gc_user_credential`:
+
+- **`GET_TASK_ACTIONS`** — the BPM `actionList` is user-specific. The 4.0 API returns only the actions the *authenticated caller* is permitted to take on that task. Calling with the admin credential returns the admin's action list, not the current user's.
+- **`action_task` (PUT)** — BPM records the authenticated caller as the approver in its audit trail, not a field in the request body. Using the admin credential would show `gcs_reports` as the approver in every BPM workflow history.
+
+### How user credentials work in APEX
+
+APEX's Fusion Auth integration automatically stores the logged-in user's Fusion access token as an APEX Web Credential. This credential is identified by a single fixed static ID (`gc_user_credential`) shared by all users — APEX resolves it to the current session user's token at runtime. No page items or client-side credential-passing are needed.
+
+Set `gc_user_credential` in `pkg_bpm_tasks.sql` to the static ID of the APEX Web Credential configured for your Fusion Auth scheme.
+
+Base URL is sourced from `pkg_bicc_common.gc_fa_base_url`.
