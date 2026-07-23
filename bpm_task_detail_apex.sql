@@ -497,9 +497,10 @@ END;
         'WITHDRAW' : 'Withdraw'
     };
 
-    // Clear immediately so static LOV options don't flash before Ajax returns
+    // Clear immediately so static LOV options don't flash before Ajax returns.
+    // Keep one disabled placeholder so the floating label renders correctly while loading.
     var sel = apex.item('P6003_ACTION').node;
-    sel.innerHTML = '';
+    sel.innerHTML = '<option value="" disabled selected>Loading\u2026</option>';
 
     apex.server.process('GET_TASK_ACTIONS', { x01: taskNum }, {
         success: function (data) {
