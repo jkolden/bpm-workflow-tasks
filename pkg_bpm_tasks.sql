@@ -67,6 +67,21 @@ create or replace PACKAGE pkg_bpm_tasks AS
     FUNCTION get_history(p_task_number IN NUMBER) RETURN CLOB;
 
     ---------------------------------------------------------------------------
+    -- Return raw XML payload CLOB for a single task  (4.0 API)
+    -- Parsed on the APEX side by GET_TASK_PAYLOAD callback, keyed on
+    -- task_def_name, to produce a {label, value} field list.
+    ---------------------------------------------------------------------------
+    FUNCTION get_payload(p_task_number IN NUMBER) RETURN CLOB;
+
+    ---------------------------------------------------------------------------
+    -- Emit payload fields as apex_json objects (label/value pairs) for a task.
+    -- Called from the GET_TASK_PAYLOAD Ajax callback — caller must have already
+    -- opened an apex_json array before calling this procedure.
+    -- Branches per task_def_name; emits nothing for unknown task types.
+    ---------------------------------------------------------------------------
+    PROCEDURE emit_payload_fields(p_task_number IN NUMBER);
+
+    ---------------------------------------------------------------------------
     -- Create a standalone todo task  (3.0 API)
     -- Creates a notification in the assignee's BPM inbox.
     ---------------------------------------------------------------------------

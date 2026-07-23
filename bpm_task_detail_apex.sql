@@ -78,9 +78,40 @@ SELECT '<button type="button" class="btask-toggle"
 -- Width:                     48
 
 -- =============================================================================
--- STEP 5: Ajax Callbacks — create five processes on page 6004
+-- STEP 5: Ajax Callbacks — create six processes on page 6004
 -- =============================================================================
 -- Process Point: Ajax Callback  |  Type: PL/SQL Code
+
+-- ---- GET_TASK_PAYLOAD ----
+-- Name: GET_TASK_PAYLOAD
+-- Thin wrapper — all parsing logic lives in pkg_bpm_tasks.emit_payload_fields.
+-- To add a new task type: add an ELSIF branch to emit_payload_fields
+-- in pkg_bpm_tasks.plb and recompile.  No changes needed here.
+
+/*
+DECLARE
+    l_task_number NUMBER := TO_NUMBER(apex_application.g_x01);
+BEGIN
+    apex_json.open_object;
+    apex_json.write('status', 'OK');
+    apex_json.open_array('fields');
+    pkg_bpm_tasks.emit_payload_fields(l_task_number);
+    apex_json.close_array;
+    apex_json.close_object;
+EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+        apex_json.open_object;
+        apex_json.write('status', 'ERROR');
+        apex_json.write('message', 'Task ' || l_task_number || ' not found.');
+        apex_json.close_object;
+    WHEN OTHERS THEN
+        apex_json.open_object;
+        apex_json.write('status', 'ERROR');
+        apex_json.write('message', SQLERRM);
+        apex_json.close_object;
+END;
+*/
+
 
 -- ---- GET_TASK_COMMENTS ----
 -- Name: GET_TASK_COMMENTS

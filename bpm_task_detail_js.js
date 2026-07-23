@@ -8,8 +8,9 @@
  * APEX setup:
  *   - Upload to Shared Components > Static Application Files.
  *   - Reference on page 6004 as: #APP_FILES#bpm_task_detail_js#MIN#.js
- *   - Requires four Ajax callbacks: GET_TASK_COMMENTS, GET_TASK_ATTACHMENTS,
- *     ADD_TASK_COMMENT, ADD_TASK_ATTACHMENT (see bpm_task_detail_apex.sql).
+ *   - Requires six Ajax callbacks: GET_TASK_PAYLOAD, GET_TASK_COMMENTS,
+ *     GET_TASK_ATTACHMENTS, ADD_TASK_COMMENT, ADD_TASK_ATTACHMENT,
+ *     DOWNLOAD_TASK_ATTACHMENT (see bpm_task_detail_apex.sql).
  *   - Report needs an HTML Expression column for the toggle button.
  */
 (function () {
@@ -62,11 +63,18 @@
     });
 
     /* ================================================================== */
-    /*  Fetch both comments + attachments in parallel                      */
+    /*  Fetch payload, comments, and attachments in parallel              */
     /* ================================================================== */
     function fetchData(taskNum, $panel) {
-        var dComments = $.Deferred(),
+        var dPayload  = $.Deferred(),
+            dComments = $.Deferred(),
             dAttach   = $.Deferred();
+
+        apex.server.process("GET_TASK_PAYLOAD", { x01: String(taskNum) }, {
+            dataType: "json",
+            success: function (data) { dPayload.resolve(data); },
+            error:   function ()     { dPayload.resolve({ status: "ERROR", fields: [] }); }
+        });
 
         apex.server.process("GET_TASK_COMMENTS", { x01: String(taskNum) }, {
             dataType: "json",
@@ -80,15 +88,15 @@
             error:   function ()     { dAttach.resolve({ status: "ERROR" }); }
         });
 
-        $.when(dComments, dAttach).done(function (cData, aData) {
-            render(taskNum, cData, aData, $panel);
+        $.when(dPayload, dComments, dAttach).done(function (pData, cData, aData) {
+            render(taskNum, pData, cData, aData, $panel);
         });
     }
 
     /* ================================================================== */
     /*  Render combined panel                                              */
     /* ================================================================== */
-    function render(taskNum, commentsData, attachData, $panel) {
+    function render(taskNum, payloadData, commentsData, attachData, $panel) {
         var h = "";
 
         // --- Header ---
@@ -102,10 +110,28 @@
         h += '<div class="btask-body">';
 
         // ============================================================
+        //  DETAILS section  (payload fields — shown only when present)
+        // ============================================================
+        var fields = (payloadData && payloadData.fields) ? payloadData.fields : [];
+        if (fields.length) {
+            h += '<div class="btask-section">';
+            h += '<div class="btask-section-title btask-section-title--details">Details</div>';
+            h += '<div class="btask-detail-fields">';
+            for (var k = 0; k < fields.length; k++) {
+                var f = fields[k];
+                h += '<div class="btask-detail-field">' +
+                     '<span class="btask-field-label">' + escHtml(f.label) + '</span>' +
+                     '<span class="btask-field-value">' + escHtml(f.value) + '</span>' +
+                     '</div>';
+            }
+            h += '</div></div>';
+        }
+
+        // ============================================================
         //  COMMENTS section
         // ============================================================
         h += '<div class="btask-section">';
-        h += '<div class="btask-section-title">Comments</div>';
+        h += '<div class="btask-section-title btask-section-title--comments">Comments</div>';
 
         // Add comment form
         h += '<div class="btask-add-comment">' +
@@ -141,7 +167,7 @@
         //  ATTACHMENTS section
         // ============================================================
         h += '<div class="btask-section">';
-        h += '<div class="btask-section-title">Attachments</div>';
+        h += '<div class="btask-section-title btask-section-title--attachments">Attachments</div>';
 
         // Upload form
         h += '<div class="btask-add-attach">' +
