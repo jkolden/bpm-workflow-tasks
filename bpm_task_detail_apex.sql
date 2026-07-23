@@ -29,6 +29,7 @@
 /*
 SELECT '<button type="button" class="btask-toggle"
                data-task-number="' || task_number || '"
+               data-task-state="' || state || '"
                aria-label="Task Details">
          <span class="fa fa-folder-o"></span>
        </button>' AS detail_toggle,

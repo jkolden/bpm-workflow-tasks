@@ -23,10 +23,11 @@
         e.preventDefault();
         e.stopPropagation();
 
-        var $btn    = $(this),
-            taskNum = $btn.data("task-number"),
-            $tr     = $btn.closest("tr"),
-            $exist  = $tr.next(".btask-detail-row");
+        var $btn      = $(this),
+            taskNum   = $btn.data("task-number"),
+            taskState = $btn.data("task-state") || "",
+            $tr       = $btn.closest("tr"),
+            $exist    = $tr.next(".btask-detail-row");
 
         // Collapse if already open
         if ($exist.length) {
@@ -59,13 +60,13 @@
         $tr.after($detailRow);
         $detailRow.hide().slideDown(200);
 
-        fetchData(taskNum, $detailRow.find(".btask-panel"));
+        fetchData(taskNum, taskState, $detailRow.find(".btask-panel"));
     });
 
     /* ================================================================== */
     /*  Fetch payload, comments, and attachments in parallel              */
     /* ================================================================== */
-    function fetchData(taskNum, $panel) {
+    function fetchData(taskNum, taskState, $panel) {
         var dPayload  = $.Deferred(),
             dComments = $.Deferred(),
             dAttach   = $.Deferred();
@@ -89,15 +90,19 @@
         });
 
         $.when(dPayload, dComments, dAttach).done(function (pData, cData, aData) {
-            render(taskNum, pData, cData, aData, $panel);
+            render(taskNum, taskState, pData, cData, aData, $panel);
         });
     }
 
     /* ================================================================== */
     /*  Render combined panel                                              */
     /* ================================================================== */
-    function render(taskNum, payloadData, commentsData, attachData, $panel) {
+    // States where the BPM API rejects new comments and attachments
+    var TERMINAL_STATES = { COMPLETED: 1, WITHDRAWN: 1, EXPIRED: 1, ERRORED: 1, SUSPENDED: 1 };
+
+    function render(taskNum, taskState, payloadData, commentsData, attachData, $panel) {
         var h = "";
+        var canAdd = !TERMINAL_STATES[taskState.toUpperCase()];
 
         // --- Header ---
         h += '<div class="btask-header">' +
@@ -133,13 +138,15 @@
         h += '<div class="btask-section">';
         h += '<div class="btask-section-title btask-section-title--comments">Comments</div>';
 
-        // Add comment form
-        h += '<div class="btask-add-comment">' +
-             '<textarea class="btask-comment-input" placeholder="Add a comment..." ' +
-             'rows="2" maxlength="4000"></textarea>' +
-             '<button type="button" class="btask-comment-save t-Button t-Button--hot ' +
-             't-Button--small" data-task-number="' + taskNum + '">' +
-             '<span class="t-Icon fa fa-plus"></span> Add</button></div>';
+        // Add comment form — hidden for terminal states
+        if (canAdd) {
+            h += '<div class="btask-add-comment">' +
+                 '<textarea class="btask-comment-input" placeholder="Add a comment..." ' +
+                 'rows="2" maxlength="4000"></textarea>' +
+                 '<button type="button" class="btask-comment-save t-Button t-Button--hot ' +
+                 't-Button--small" data-task-number="' + taskNum + '">' +
+                 '<span class="t-Icon fa fa-plus"></span> Add</button></div>';
+        }
 
         // Comments list — normalized by PL/SQL: { status, comments: [...] }
         var comments = commentsData.comments || [];
@@ -169,12 +176,14 @@
         h += '<div class="btask-section">';
         h += '<div class="btask-section-title btask-section-title--attachments">Attachments</div>';
 
-        // Upload form
-        h += '<div class="btask-add-attach">' +
-             '<input type="file" class="btask-file-input">' +
-             '<button type="button" class="btask-attach-save t-Button t-Button--hot ' +
-             't-Button--small" data-task-number="' + taskNum + '">' +
-             '<span class="t-Icon fa fa-upload"></span> Upload</button></div>';
+        // Upload form — hidden for terminal states
+        if (canAdd) {
+            h += '<div class="btask-add-attach">' +
+                 '<input type="file" class="btask-file-input">' +
+                 '<button type="button" class="btask-attach-save t-Button t-Button--hot ' +
+                 't-Button--small" data-task-number="' + taskNum + '">' +
+                 '<span class="t-Icon fa fa-upload"></span> Upload</button></div>';
+        }
 
         // Attachment list — normalized by PL/SQL: { status, attachments: [...] }
         var attachments = attachData.attachments || [];
@@ -206,7 +215,7 @@
         h += '</div>';  // close attachments section
         h += '</div>';  // close btask-body
 
-        $panel.html(h);
+        $panel.data("task-state", taskState).html(h);
         $panel.find(".btask-comment-input").focus();
     }
 
@@ -232,7 +241,7 @@
                 dataType: "json",
                 success: function (data) {
                     if (data.status === "OK") {
-                        fetchData(taskNum, $panel);
+                        fetchData(taskNum, $panel.data("task-state") || "", $panel);
                     } else {
                         showError(data.message || "Error adding comment.");
                         resetBtn($btn, "fa-plus");
@@ -302,7 +311,7 @@
                 dataType: "json",
                 success: function (data) {
                     if (data.status === "OK") {
-                        fetchData(taskNum, $panel);
+                        fetchData(taskNum, $panel.data("task-state") || "", $panel);
                     } else {
                         showError(data.message || "Error uploading attachment.");
                         resetBtn($btn, "fa-upload");
