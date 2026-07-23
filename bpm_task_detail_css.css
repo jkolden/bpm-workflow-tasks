@@ -158,7 +158,8 @@
     content: "\f0e5";
     font-family: "Font APEX Large";
     margin-right: 4px;
-    font-size: 10px;
+    font-size: 14px;
+    vertical-align: middle;
 }
 
 .btask-text {
