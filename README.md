@@ -20,7 +20,6 @@ Oracle APEX application for managing Fusion BPM approval tasks via REST API. Pro
 | File | Description |
 |---|---|
 | `bpm_workflow_tasks.sql` | Table DDL -- stores task metadata + action audit trail |
-| `bpm_task_statuses.sql` | Lookup table for tracking status values |
 | `pkg_bpm_tasks.sql` | Package spec |
 | `pkg_bpm_tasks.plb` | Package body |
 | `bpm_task_detail_js.js` | JavaScript -- toggle panels, fetch/render payload details, comments, attachments, history; upload/download handlers |
