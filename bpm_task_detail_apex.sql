@@ -416,6 +416,123 @@ END;
 
 
 -- =============================================================================
+-- STEP 7: Page 6003 (Task Action modal) — dynamic action list
+-- =============================================================================
+-- Page 6003 is the modal/dialog that lets the user take an action on a task.
+-- Instead of a static LOV, the P6003_ACTION select list is populated dynamically
+-- at page-load time by calling the GET_TASK_ACTIONS Ajax callback, which fetches
+-- the valid actions for that specific task from the 4.0 API actionList.
+--
+-- P6003_ACTION should be configured as:
+--   Type:           Select List
+--   LOV Type:       Static Values  (leave one placeholder entry so APEX renders it)
+--   Escape Special: No  (not needed for this item)
+--
+-- The JS below (Execute when Page Loads) replaces the select options at runtime.
+
+-- ---- GET_TASK_ACTIONS ----
+-- Name: GET_TASK_ACTIONS
+-- Ajax Callback on page 6003.
+-- Fetches /bpm/api/4.0/tasks/{number} and returns the actionList as a JSON array.
+
+/*
+DECLARE
+    l_task_number NUMBER := TO_NUMBER(apex_application.g_x01);
+    l_url         VARCHAR2(1000);
+    l_response    CLOB;
+BEGIN
+    l_url := pkg_bicc_common.gc_fa_base_url
+           || '/bpm/api/4.0/tasks/' || l_task_number;
+
+    l_response := apex_web_service.make_rest_request(
+        p_url                  => l_url,
+        p_http_method          => 'GET',
+        p_credential_static_id => pkg_bpm_tasks.gc_credential
+    );
+
+    apex_json.open_object;
+    apex_json.write('status', 'OK');
+    apex_json.open_array('actions');
+    FOR r IN (
+        SELECT j.action_id
+          FROM JSON_TABLE(l_response, '$.actionList[*]' COLUMNS (
+              action_id VARCHAR2(100) PATH '$.actionId'
+          )) j
+    ) LOOP
+        apex_json.write(r.action_id);
+    END LOOP;
+    apex_json.close_array;
+    apex_json.close_object;
+
+EXCEPTION
+    WHEN OTHERS THEN
+        apex_json.open_object;
+        apex_json.write('status', 'ERROR');
+        apex_json.write('message', SQLERRM);
+        apex_json.close_object;
+END;
+*/
+
+
+-- ---- Page 6003: Execute when Page Loads (JavaScript) ----
+-- Replaces P6003_ACTION options with the dynamic action list.
+-- ACQUIRE is relabelled "CLAIM" and pinned first with a separator.
+-- Remaining actions are sorted alphabetically.
+
+/*
+(function () {
+    var taskNum = $v('P6003_TASK_NUMBER');
+    if (!taskNum) return;
+
+    var labels = {
+        'ACQUIRE'  : 'Claim',
+        'APPROVE'  : 'Approve',
+        'COMPLETE' : 'Complete',
+        'DELEGATE' : 'Delegate',
+        'PUSHBACK' : 'Pushback',
+        'REASSIGN' : 'Reassign',
+        'REJECT'   : 'Reject',
+        'WITHDRAW' : 'Withdraw'
+    };
+
+    apex.server.process('GET_TASK_ACTIONS', { x01: taskNum }, {
+        success: function (data) {
+            if (data.status !== 'OK' || !data.actions || !data.actions.length) return;
+
+            var sel = apex.item('P6003_ACTION').node;
+            sel.innerHTML = '';
+
+            // Pin ACQUIRE (Claim) first with a visual separator below it
+            if (data.actions.indexOf('ACQUIRE') !== -1) {
+                var claim = document.createElement('option');
+                claim.value = 'ACQUIRE';
+                claim.text  = 'Claim';
+                sel.appendChild(claim);
+
+                var sep = document.createElement('option');
+                sep.value    = '';
+                sep.text     = '\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500';
+                sep.disabled = true;
+                sel.appendChild(sep);
+            }
+
+            // Remaining actions sorted alphabetically
+            data.actions
+                .filter(function (a) { return a !== 'ACQUIRE'; })
+                .sort()
+                .forEach(function (a) {
+                    var o = document.createElement('option');
+                    o.value = a;
+                    o.text  = labels[a] || (a.charAt(0).toUpperCase() + a.slice(1).toLowerCase());
+                    sel.appendChild(o);
+                });
+        }
+    });
+}());
+*/
+
+
+-- =============================================================================
 -- NOTES
 -- =============================================================================
 -- BPM API JSON shapes (4.0, { items: [...], hasMore, links } wrapper):
