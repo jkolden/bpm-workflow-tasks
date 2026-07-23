@@ -497,12 +497,13 @@ END;
         'WITHDRAW' : 'Withdraw'
     };
 
+    // Clear immediately so static LOV options don't flash before Ajax returns
+    var sel = apex.item('P6003_ACTION').node;
+    sel.innerHTML = '';
+
     apex.server.process('GET_TASK_ACTIONS', { x01: taskNum }, {
         success: function (data) {
             if (data.status !== 'OK' || !data.actions || !data.actions.length) return;
-
-            var sel = apex.item('P6003_ACTION').node;
-            sel.innerHTML = '';
 
             // Pin ACQUIRE (Claim) first with a visual separator below it
             if (data.actions.indexOf('ACQUIRE') !== -1) {
