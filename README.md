@@ -23,13 +23,10 @@ Oracle APEX application for managing Fusion BPM approval tasks via REST API. Pro
 | `bpm_task_statuses.sql` | Lookup table for tracking status values |
 | `pkg_bpm_tasks.sql` | Package spec |
 | `pkg_bpm_tasks.plb` | Package body |
-| `bpm_task_detail_js.js` | JavaScript -- toggle panels, fetch/render comments, attachments, history; upload/download handlers |
-| `bpm_task_detail_css.css` | Styles -- detail panel (teal), history panel (purple), responsive layout |
+| `bpm_task_detail_js.js` | JavaScript -- toggle panels, fetch/render payload details, comments, attachments, history; upload/download handlers |
+| `bpm_task_detail_css.css` | Styles -- amber for payload details, blue for comments, teal for attachments, purple for history |
 | `bpm_task_detail_apex.sql` | APEX setup instructions + Ajax callback PL/SQL for page 6004 |
 | `f121_page_6004.sql` | APEX page export (faceted search) |
-| `add attachment.sql` | Standalone attachment upload script (reference/testing) |
-| `kanban_board.css` | Kanban board styles (deprecated -- client chose faceted search) |
-| `bpm_task_cards.sql` | Kanban card query (deprecated) |
 
 ## API Endpoints Used
 
