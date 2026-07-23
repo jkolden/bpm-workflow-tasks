@@ -484,7 +484,9 @@ END;
     var taskNum = $v('P6003_TASK_NUMBER');
     if (!taskNum) return;
 
-    var labels = {
+    // Whitelist: only actions we have tested and built payloads for.
+    // Intersected with the API actionList so only valid-for-state options appear.
+    var supported = {
         'ACQUIRE'  : 'Claim',
         'APPROVE'  : 'Approve',
         'COMPLETE' : 'Complete',
@@ -516,14 +518,14 @@ END;
                 sel.appendChild(sep);
             }
 
-            // Remaining actions sorted alphabetically (skip ACQUIRE and any VIEW* actions)
+            // Remaining: intersection of API list and our whitelist, sorted alphabetically
             data.actions
-                .filter(function (a) { return a !== 'ACQUIRE' && a.toUpperCase().indexOf('VIEW') !== 0; })
+                .filter(function (a) { return a !== 'ACQUIRE' && supported.hasOwnProperty(a); })
                 .sort()
                 .forEach(function (a) {
                     var o = document.createElement('option');
                     o.value = a;
-                    o.text  = labels[a] || (a.charAt(0).toUpperCase() + a.slice(1).toLowerCase());
+                    o.text  = supported[a];
                     sel.appendChild(o);
                 });
         }
