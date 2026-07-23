@@ -516,9 +516,9 @@ END;
                 sel.appendChild(sep);
             }
 
-            // Remaining actions sorted alphabetically
+            // Remaining actions sorted alphabetically (skip ACQUIRE and any VIEW* actions)
             data.actions
-                .filter(function (a) { return a !== 'ACQUIRE'; })
+                .filter(function (a) { return a !== 'ACQUIRE' && a.toUpperCase().indexOf('VIEW') !== 0; })
                 .sort()
                 .forEach(function (a) {
                     var o = document.createElement('option');
