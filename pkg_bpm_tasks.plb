@@ -148,7 +148,8 @@ create or replace PACKAGE BODY pkg_bpm_tasks AS
         p_action        IN VARCHAR2,
         p_comment       IN VARCHAR2 DEFAULT NULL,
         p_assignee_id   IN VARCHAR2 DEFAULT NULL,
-        p_assignee_type IN VARCHAR2 DEFAULT 'user'
+        p_assignee_type IN VARCHAR2 DEFAULT 'user',
+        p_credential_id IN VARCHAR2 DEFAULT NULL
     ) IS
         l_url            VARCHAR2(1000);
         l_body           CLOB;
@@ -157,14 +158,16 @@ create or replace PACKAGE BODY pkg_bpm_tasks AS
         l_status         NUMBER;
         l_errmsg         VARCHAR2(4000);
         l_action_count   NUMBER;
+        l_cred           VARCHAR2(50) := NVL(p_credential_id, gc_credential);
     BEGIN
-        -- Fetch task detail to check allowed actions
+        -- Fetch task detail to check allowed actions — use caller's credential
+        -- so actionList reflects what that user is actually permitted to do.
         l_url := pkg_bicc_common.gc_fa_base_url || '/bpm/api/4.0/tasks/' || p_task_number;
 
         l_task_response := apex_web_service.make_rest_request(
             p_url                  => l_url,
             p_http_method          => 'GET',
-            p_credential_static_id => gc_credential
+            p_credential_static_id => l_cred
         );
 
         SELECT COUNT(*)
@@ -224,17 +227,21 @@ create or replace PACKAGE BODY pkg_bpm_tasks AS
             p_url                  => l_url,
             p_http_method          => 'PUT',
             p_body                 => l_body,
-            p_credential_static_id => gc_credential
+            p_credential_static_id => l_cred
         );
 
         l_status := apex_web_service.g_status_code;
 
-        -- Log the action and response for debugging
+        -- On success the API echoes the full task JSON — store nothing.
+        -- On error store a truncated snippet for debugging.
         UPDATE bpm_workflow_tasks
            SET last_action          = UPPER(p_action),
                last_action_ts       = SYSTIMESTAMP,
                last_action_status   = CASE WHEN l_status = 200 THEN 'OK' ELSE 'ERROR' END,
-               last_action_response = SUBSTR(l_response, 1, 4000)
+               last_action_response = CASE WHEN l_status = 200
+                                           THEN NULL
+                                           ELSE SUBSTR(l_response, 1, 500)
+                                      END
          WHERE task_number = p_task_number;
         COMMIT;
 

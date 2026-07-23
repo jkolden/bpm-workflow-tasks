@@ -20,13 +20,18 @@ create or replace PACKAGE pkg_bpm_tasks AS
     -- Act on a task: APPROVE, REJECT, ACQUIRE, REASSIGN, DELEGATE, etc.
     -- Logs result to last_action_* columns on bpm_workflow_tasks.
     -- p_assignee_id / p_assignee_type only needed for REASSIGN / DELEGATE.
+    -- p_credential_id: APEX Web Credential static ID to use for both the
+    --   actionList pre-check GET and the action PUT.  Pass the user's own
+    --   credential so the BPM audit trail records the real approver.
+    --   Defaults to gc_credential (admin fallback) when NULL.
     ---------------------------------------------------------------------------
     PROCEDURE action_task(
         p_task_number   IN NUMBER,
         p_action        IN VARCHAR2,
         p_comment       IN VARCHAR2 DEFAULT NULL,
         p_assignee_id   IN VARCHAR2 DEFAULT NULL,
-        p_assignee_type IN VARCHAR2 DEFAULT 'user'
+        p_assignee_type IN VARCHAR2 DEFAULT 'user',
+        p_credential_id IN VARCHAR2 DEFAULT NULL
     );
 
     ---------------------------------------------------------------------------
