@@ -11,7 +11,8 @@ Oracle APEX application for managing Fusion BPM approval tasks via REST API. Pro
 - **Upload Attachments** -- Upload files to tasks via multipart/mixed POST with client-side 10 MB guard
 - **Download Attachments** -- Download attachment files via streaming proxy (base64 decode in browser)
 - **Approval History** -- Separate toggle column showing the full approval chain with action, approver, state, and timestamps; future participants are visually dimmed
-- **Task Actions** -- Approve, reject, reassign, acquire, delegate, or push back tasks with optional comments
+- **Task Actions** -- Approve, reject, reassign, acquire, delegate, push back, escalate, suspend, resume, or skip current assignment with optional comments
+- **Fusion Deeplink** -- "View in Fusion" icon link on each row opens the native Fusion notification form in a new tab (built from stored `TASK_ID` GUID, no extra API call needed)
 - **Create Todo Tasks** -- Drawer form (page 6104) to create standalone todo tasks in assignees' BPM inboxes
 - **Incremental Refresh** -- Orders by `updatedDate desc` and stops paging once caught up, minimizing API calls on subsequent syncs
 
@@ -41,8 +42,8 @@ Oracle APEX application for managing Fusion BPM approval tasks via REST API. Pro
 | POST | `/bpm/api/3.0/tasks/{number}/comments` | 3.0 | `gc_credential` | Add comment |
 | POST | `/bpm/api/3.0/tasks/{number}/attachments` | 3.0 | `gc_credential` | Upload attachment (multipart/mixed) |
 | POST | `/bpm/api/3.0/tasks/todoTask` | 3.0 | `gc_credential` | Create standalone todo task |
-| PUT | `/bpm/api/4.0/tasks/{number}` | 4.0 | `gc_credential` | ACQUIRE action only |
-| PUT | `/bpm/api/3.0/tasks` | 3.0 | `gc_credential` | All other actions (APPROVE, REJECT, REASSIGN, etc.) |
+| PUT | `/bpm/api/4.0/tasks/{number}` | 4.0 | `gc_user_credential` | ACQUIRE and SKIP_CURRENT_ASSIGNMENT |
+| PUT | `/bpm/api/3.0/tasks` | 3.0 | `gc_user_credential` | All other actions (APPROVE, REJECT, REASSIGN, ESCALATE, SUSPEND, RESUME, etc.) |
 
 ## Package Procedures & Functions
 
@@ -50,7 +51,7 @@ Oracle APEX application for managing Fusion BPM approval tasks via REST API. Pro
 Incremental sync -- paginates the task list ordered by `updatedDate desc`, MERGEs into `bpm_workflow_tasks`, and exits early once it reaches tasks already synced. First run fetches everything. Preserves `last_action_*` and `tracking_status` columns between refreshes.
 
 ### `action_task(p_task_number, p_action, p_comment, p_assignee_id, p_assignee_type, p_credential_id)`
-Validates the action against the task's `actionList`, then routes ACQUIRE to the 4.0 single-task endpoint and all other actions to the 3.0 bulk endpoint. Logs results to audit columns. Both the pre-check GET and the action PUT use `p_credential_id` (falls back to `gc_credential` when NULL) so the BPM audit trail records the real approver.
+Validates the action against the task's `actionList`, then routes to the correct endpoint: `ACQUIRE` and `SKIP_CURRENT_ASSIGNMENT` use the 4.0 single-task endpoint (`PUT /tasks/{number}`); all other actions use the 3.0 bulk endpoint (`PUT /tasks`). Logs results to audit columns. Both the pre-check GET and the action PUT use `p_credential_id` (falls back to `gc_credential` when NULL) so the BPM audit trail records the real approver.
 
 ### `get_comments(p_task_number) RETURN CLOB`
 Returns raw JSON from the 4.0 comments endpoint.
@@ -93,7 +94,7 @@ See `bpm_task_detail_apex.sql` for step-by-step instructions:
 1. Compile `pkg_bpm_tasks.sql` (spec) then `pkg_bpm_tasks.plb` (body)
 2. Upload `bpm_task_detail_js.js` and `bpm_task_detail_css.css` to Static Application Files
 3. Reference on page 6004 as `#APP_FILES#bpm_task_detail_js#MIN#.js` / `#APP_FILES#bpm_task_detail_css#MIN#.css`
-4. Add `DETAIL_TOGGLE` and `HISTORY_TOGGLE` columns to report SQL (Escape Special Characters = No)
+4. Add `DETAIL_TOGGLE`, `HISTORY_TOGGLE`, and `FUSION_LINK` columns to report SQL (Escape Special Characters = No). Also add `TO_CHAR(task_number) AS task_number_vc` as a hidden column and use it (not `task_number`) in the Row Search searchable columns — APEX Row Search does not match NUMBER columns via LIKE.
 5. Create seven Ajax Callback processes: `GET_TASK_PAYLOAD`, `GET_TASK_COMMENTS`, `GET_TASK_ATTACHMENTS`, `ADD_TASK_COMMENT`, `ADD_TASK_ATTACHMENT`, `DOWNLOAD_TASK_ATTACHMENT`, `GET_TASK_HISTORY`
 6. Create drawer page 6104 for New Todo with `CREATE_TODO_TASK` process
 
@@ -101,7 +102,7 @@ See `bpm_task_detail_apex.sql` for step-by-step instructions:
 
 - **GETs use 4.0** -- richer JSON shape, supports `orderBy`, `history` and `payload` sub-resources
 - **POSTs/PUTs use 3.0** -- the v4.0 PUT endpoint returns error 76012 on most write operations
-- **Exception: ACQUIRE** -- only works on 4.0 with `PUT /tasks/{number}` and body `{"action":{"id":"ACQUIRE"}}`
+- **Exception: ACQUIRE and SKIP_CURRENT_ASSIGNMENT** -- both require the 4.0 single-task endpoint `PUT /tasks/{number}` with body `{"action":{"id":"..."}}`. The 3.0 bulk endpoint returns HTTP 500 for these actions.
 - **BPM API quirks**: `updatedAfter` query parameter is silently ignored; `updatedDate` in comments JSON is misspelled as `updateddDate` (double "d")
 
 ## Credential Strategy

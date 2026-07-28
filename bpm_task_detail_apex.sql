@@ -520,14 +520,18 @@ END;
     // Whitelist: only actions we have tested and built payloads for.
     // Intersected with the API actionList so only valid-for-state options appear.
     var supported = {
-        'ACQUIRE'  : 'Claim',
-        'APPROVE'  : 'Approve',
-        'COMPLETE' : 'Complete',
-        'DELEGATE' : 'Delegate',
-        'PUSHBACK' : 'Pushback',
-        'REASSIGN' : 'Reassign',
-        'REJECT'   : 'Reject',
-        'WITHDRAW' : 'Withdraw'
+        'ACQUIRE'                : 'Claim',
+        'APPROVE'                : 'Approve',
+        'COMPLETE'               : 'Complete',
+        'DELEGATE'               : 'Delegate',
+        'ESCALATE'               : 'Escalate',
+        'PUSHBACK'               : 'Pushback',
+        'REASSIGN'               : 'Reassign',
+        'REJECT'                 : 'Reject',
+        'RESUME'                 : 'Resume',
+        'SKIP_CURRENT_ASSIGNMENT': 'Skip Current Assignment',
+        'SUSPEND'                : 'Suspend',
+        'WITHDRAW'               : 'Withdraw'
     };
 
     // Clear immediately so static LOV options don't flash before Ajax returns.

@@ -188,13 +188,13 @@ create or replace PACKAGE BODY pkg_bpm_tasks AS
             );
         END IF;
 
-        -- ACQUIRE uses 4.0 single-task endpoint;
+        -- ACQUIRE and SKIP_CURRENT_ASSIGNMENT use 4.0 single-task endpoint;
         -- other actions (APPROVE, REJECT, etc.) use 3.0 bulk endpoint
-        IF UPPER(p_action) = 'ACQUIRE' THEN
+        IF UPPER(p_action) IN ('ACQUIRE', 'SKIP_CURRENT_ASSIGNMENT') THEN
             l_url := pkg_bicc_common.gc_fa_base_url
                   || '/bpm/api/4.0/tasks/' || p_task_number;
 
-            l_body := '{"action":{"id":"ACQUIRE"}}';
+            l_body := '{"action":{"id":"' || UPPER(p_action) || '"}}';
         ELSE
             l_url := pkg_bicc_common.gc_fa_base_url || '/bpm/api/3.0/tasks';
 
