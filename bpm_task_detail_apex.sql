@@ -54,6 +54,7 @@ SELECT '<button type="button" class="btask-toggle"
        assignee_type,
        created_by,
        from_user_display   AS submitted_by,
+       from_user_name,
        assigned_ts,
        ROUND(SYSDATE - CAST(assigned_ts AS DATE)) AS days_pending,
        priority,
@@ -480,6 +481,18 @@ END;
 --   P6003_TASK_NUMBER  - Hidden, stores task number
 --   P6003_ACTION       - Select List (static placeholder LOV, replaced at runtime)
 --   P6003_COMMENT      - Text Area (optional comment)
+--   P6003_ASSIGNEE     - Text Field (Fusion user ID, shown only for INFO_REQUEST)
+--                        Label: "Request Info From (User ID)"
+--                        Server-side Condition: Never (shown/hidden via JS)
+--   P6003_FROM_USER    - Hidden item, stores from_user_name of the task submitter
+--                        Type: Hidden
+--                        Value Protected: No
+--                        (Passed in from the page 6004 Link Builder as #FROM_USER_NAME#)
+--
+-- Link Builder on page 6004 (the button/link that opens page 6003):
+--   Set Items must include BOTH:
+--     P6003_TASK_NUMBER = #TASK_NUMBER#
+--     P6003_FROM_USER   = #FROM_USER_NAME#
 --
 -- P6003_ACTION configuration:
 --   Type:           Select List
@@ -528,8 +541,9 @@ END;
 -- Name: ACTION_TASK
 -- Ajax Callback on page 6003 (submit button / After Submit process).
 -- x01 = task number
--- x02 = action (APPROVE, REJECT, ACQUIRE, etc.)
+-- x02 = action (APPROVE, REJECT, ACQUIRE, INFO_REQUEST, etc.)
 -- x03 = comment (optional)
+-- x04 = assignee_id (Fusion user ID; required for INFO_REQUEST)
 -- Credential is controlled entirely by gc_user_credential in the package.
 
 /*
@@ -537,11 +551,13 @@ DECLARE
     l_task_number NUMBER         := TO_NUMBER(apex_application.g_x01);
     l_action      VARCHAR2(50)   := apex_application.g_x02;
     l_comment     VARCHAR2(4000) := SUBSTRB(apex_application.g_x03, 1, 4000);
+    l_assignee_id VARCHAR2(255)  := SUBSTRB(apex_application.g_x04, 1, 255);
 BEGIN
     pkg_bpm_tasks.action_task(
         p_task_number => l_task_number,
         p_action      => l_action,
-        p_comment     => l_comment
+        p_comment     => l_comment,
+        p_assignee_id => l_assignee_id
     );
 
     apex_json.open_object;
@@ -575,6 +591,7 @@ END;
         'COMPLETE'               : 'Complete',
         'DELEGATE'               : 'Delegate',
         'ESCALATE'               : 'Escalate',
+        'INFO_REQUEST'           : 'Request Information',
         'PUSHBACK'               : 'Pushback',
         'REASSIGN'               : 'Reassign',
         'REJECT'                 : 'Reject',
@@ -583,6 +600,25 @@ END;
         'SUSPEND'                : 'Suspend',
         'WITHDRAW'               : 'Withdraw'
     };
+
+    // Show/hide the assignee field based on action selection.
+    // Auto-populate with the task submitter's Fusion user ID (P6003_FROM_USER)
+    // when INFO_REQUEST is chosen — user can override if needed.
+    apex.item('P6003_ACTION').node.addEventListener('change', function () {
+        var needsAssignee = (this.value === 'INFO_REQUEST');
+        $('#P6003_ASSIGNEE').closest('.t-Form-fieldContainer')
+            .toggle(needsAssignee);
+        if (needsAssignee) {
+            // Pre-fill with submitter's user ID; only override if currently empty
+            if (!$v('P6003_ASSIGNEE').trim()) {
+                $s('P6003_ASSIGNEE', $v('P6003_FROM_USER') || '');
+            }
+        } else {
+            $s('P6003_ASSIGNEE', '');
+        }
+    });
+    // Start hidden
+    $('#P6003_ASSIGNEE').closest('.t-Form-fieldContainer').hide();
 
     // Clear immediately so static LOV options don't flash before Ajax returns.
     // Keep one disabled placeholder so the floating label renders correctly while loading.
@@ -621,13 +657,19 @@ END;
     });
 
     $(document).on('click', '#P6003_SUBMIT', function () {
-        var action  = $v('P6003_ACTION');
-        var comment = $v('P6003_COMMENT') || '';
+        var action     = $v('P6003_ACTION');
+        var comment    = $v('P6003_COMMENT') || '';
+        var assigneeId = $v('P6003_ASSIGNEE') || '';
         if (!action) { apex.message.showErrors([{ type: 'error', location: 'page',
             message: 'Please select an action.' }]); return; }
+        if (action === 'INFO_REQUEST' && !assigneeId.trim()) {
+            apex.message.showErrors([{ type: 'error', location: 'page',
+                message: 'Please enter the Fusion user ID to request information from.' }]);
+            return;
+        }
 
         apex.server.process('ACTION_TASK',
-            { x01: taskNum, x02: action, x03: comment },
+            { x01: taskNum, x02: action, x03: comment, x04: assigneeId },
             {
                 success: function (data) {
                     if (data.status === 'OK') {

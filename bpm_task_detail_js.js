@@ -385,6 +385,7 @@
 
         if (!taskId) return;
 
+        apex.message.clearErrors();
         $link.html('<span class="fa fa-refresh fa-anim-spin"></span>');
 
         apex.server.process("GET_FUSION_DEEPLINK", { x01: taskId }, {

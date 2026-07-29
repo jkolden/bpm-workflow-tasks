@@ -189,12 +189,34 @@ create or replace PACKAGE BODY pkg_bpm_tasks AS
         END IF;
 
         -- ACQUIRE and SKIP_CURRENT_ASSIGNMENT use 4.0 single-task endpoint;
+        -- INFO_REQUEST uses 4.0 endpoint with identities at top level;
         -- other actions (APPROVE, REJECT, etc.) use 3.0 bulk endpoint
         IF UPPER(p_action) IN ('ACQUIRE', 'SKIP_CURRENT_ASSIGNMENT') THEN
             l_url := pkg_bicc_common.gc_fa_base_url
                   || '/bpm/api/4.0/tasks/' || p_task_number;
 
             l_body := '{"action":{"id":"' || UPPER(p_action) || '"}}';
+
+        ELSIF UPPER(p_action) = 'INFO_REQUEST' THEN
+            -- 4.0 single-task endpoint; identities at top level (not inside action).
+            -- comment object is included inline when provided — appears in task
+            -- comments (not history). Tested: 200 received; verify via /comments.
+            l_url  := pkg_bicc_common.gc_fa_base_url
+                   || '/bpm/api/4.0/tasks/' || p_task_number;
+
+            l_body := '{"action":{"id":"INFO_REQUEST"}'
+                   || ',"identities":[{"id":"'
+                   || apex_escape.json(p_assignee_id)
+                   || '","type":"' || NVL(p_assignee_type, 'user') || '"}]';
+
+            IF p_comment IS NOT NULL THEN
+                l_body := l_body || ',"comment":{"commentStr":"'
+                       || apex_escape.json(p_comment)
+                       || '","commentScope":"TASK"}';
+            END IF;
+
+            l_body := l_body || '}';
+
         ELSE
             l_url := pkg_bicc_common.gc_fa_base_url || '/bpm/api/3.0/tasks';
 

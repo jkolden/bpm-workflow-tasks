@@ -11,7 +11,8 @@ Oracle APEX application for managing Fusion BPM approval tasks via REST API. Pro
 - **Upload Attachments** -- Upload files to tasks via multipart/mixed POST with client-side 10 MB guard
 - **Download Attachments** -- Download attachment files via streaming proxy (base64 decode in browser)
 - **Approval History** -- Separate toggle column showing the full approval chain with action, approver, state, and timestamps; future participants are visually dimmed
-- **Task Actions** -- Approve, reject, reassign, acquire, delegate, push back, escalate, suspend, resume, or skip current assignment with optional comments
+- **Task Actions** -- Approve, reject, reassign, acquire, delegate, push back, escalate, suspend, resume, skip current assignment, or request information with optional comments
+- **Request Information** -- Sends an INFO_REQUEST to the task submitter (or any Fusion user), moving the task to `INFO_REQUESTED` state. Assignee field auto-populates with the original submitter's user ID. Comment included inline in the same API call and appears in task history.
 - **Fusion Deeplink** -- "View in Fusion" icon link on each row opens the native Fusion notification form in a new tab (built from stored `TASK_ID` GUID, no extra API call needed)
 - **Create Todo Tasks** -- Drawer form (page 6104) to create standalone todo tasks in assignees' BPM inboxes
 - **Incremental Refresh** -- Orders by `updatedDate desc` and stops paging once caught up, minimizing API calls on subsequent syncs
@@ -25,7 +26,8 @@ Oracle APEX application for managing Fusion BPM approval tasks via REST API. Pro
 | `pkg_bpm_tasks.plb` | Package body |
 | `bpm_task_detail_js.js` | JavaScript -- toggle panels, fetch/render payload details, comments, attachments, history; upload/download handlers |
 | `bpm_task_detail_css.css` | Styles -- amber for payload details, blue for comments, teal for attachments, purple for history |
-| `bpm_task_detail_apex.sql` | APEX setup instructions + Ajax callback PL/SQL for page 6004 |
+| `bpm_task_detail_apex.sql` | APEX setup instructions + Ajax callback PL/SQL for pages 6003 and 6004 |
+| `bpm_task_details_bip.sql` | BIP-sourced task supplemental data DDL |
 | `f121_page_6004.sql` | APEX page export (faceted search) |
 
 ## API Endpoints Used
@@ -42,7 +44,7 @@ Oracle APEX application for managing Fusion BPM approval tasks via REST API. Pro
 | POST | `/bpm/api/3.0/tasks/{number}/comments` | 3.0 | `gc_credential` | Add comment |
 | POST | `/bpm/api/3.0/tasks/{number}/attachments` | 3.0 | `gc_credential` | Upload attachment (multipart/mixed) |
 | POST | `/bpm/api/3.0/tasks/todoTask` | 3.0 | `gc_credential` | Create standalone todo task |
-| PUT | `/bpm/api/4.0/tasks/{number}` | 4.0 | `gc_user_credential` | ACQUIRE and SKIP_CURRENT_ASSIGNMENT |
+| PUT | `/bpm/api/4.0/tasks/{number}` | 4.0 | `gc_user_credential` | ACQUIRE, SKIP_CURRENT_ASSIGNMENT, INFO_REQUEST |
 | PUT | `/bpm/api/3.0/tasks` | 3.0 | `gc_user_credential` | All other actions (APPROVE, REJECT, REASSIGN, ESCALATE, SUSPEND, RESUME, etc.) |
 
 ## Package Procedures & Functions
@@ -51,7 +53,11 @@ Oracle APEX application for managing Fusion BPM approval tasks via REST API. Pro
 Incremental sync -- paginates the task list ordered by `updatedDate desc`, MERGEs into `bpm_workflow_tasks`, and exits early once it reaches tasks already synced. First run fetches everything. Preserves `last_action_*` and `tracking_status` columns between refreshes.
 
 ### `action_task(p_task_number, p_action, p_comment, p_assignee_id, p_assignee_type, p_credential_id)`
-Validates the action against the task's `actionList`, then routes to the correct endpoint: `ACQUIRE` and `SKIP_CURRENT_ASSIGNMENT` use the 4.0 single-task endpoint (`PUT /tasks/{number}`); all other actions use the 3.0 bulk endpoint (`PUT /tasks`). Logs results to audit columns. Both the pre-check GET and the action PUT use `p_credential_id` (falls back to `gc_credential` when NULL) so the BPM audit trail records the real approver.
+Validates the action against the task's `actionList`, then routes to the correct endpoint:
+- **4.0 single-task endpoint** (`PUT /tasks/{number}`): `ACQUIRE`, `SKIP_CURRENT_ASSIGNMENT`, `INFO_REQUEST`
+- **3.0 bulk endpoint** (`PUT /tasks`): all other actions (APPROVE, REJECT, REASSIGN, ESCALATE, etc.)
+
+`INFO_REQUEST` requires 4.0 -- the 3.0 bulk endpoint silently no-ops it. The `identities` array (target user) sits at the top level of the payload, not inside `action`. Optional comment is passed as an inline object `{"commentStr":"...","commentScope":"TASK"}` and appears in task history. Logs results to audit columns.
 
 ### `get_comments(p_task_number) RETURN CLOB`
 Returns raw JSON from the 4.0 comments endpoint.
@@ -95,14 +101,17 @@ See `bpm_task_detail_apex.sql` for step-by-step instructions:
 2. Upload `bpm_task_detail_js.js` and `bpm_task_detail_css.css` to Static Application Files
 3. Reference on page 6004 as `#APP_FILES#bpm_task_detail_js#MIN#.js` / `#APP_FILES#bpm_task_detail_css#MIN#.css`
 4. Add `DETAIL_TOGGLE`, `HISTORY_TOGGLE`, and `FUSION_LINK` columns to report SQL (Escape Special Characters = No). Also add `TO_CHAR(task_number) AS task_number_vc` as a hidden column and use it (not `task_number`) in the Row Search searchable columns — APEX Row Search does not match NUMBER columns via LIKE.
-5. Create seven Ajax Callback processes: `GET_TASK_PAYLOAD`, `GET_TASK_COMMENTS`, `GET_TASK_ATTACHMENTS`, `ADD_TASK_COMMENT`, `ADD_TASK_ATTACHMENT`, `DOWNLOAD_TASK_ATTACHMENT`, `GET_TASK_HISTORY`
-6. Create drawer page 6104 for New Todo with `CREATE_TODO_TASK` process
+5. Create seven Ajax Callback processes on page 6004: `GET_TASK_PAYLOAD`, `GET_TASK_COMMENTS`, `GET_TASK_ATTACHMENTS`, `ADD_TASK_COMMENT`, `ADD_TASK_ATTACHMENT`, `DOWNLOAD_TASK_ATTACHMENT`, `GET_TASK_HISTORY`
+6. Create modal page 6003 (Task Actions) with items `P6003_TASK_NUMBER`, `P6003_ACTION`, `P6003_COMMENT`, `P6003_ASSIGNEE` (hidden/shown via JS), `P6003_FROM_USER_NAME` (hidden). Ajax callbacks: `GET_TASK_ACTIONS`, `ACTION_TASK`. Add `from_user_name` as a hidden column to the page 6004 report and pass it via Link Builder as `P6003_FROM_USER_NAME` when opening the modal.
+7. Create drawer page 6104 for New Todo with `CREATE_TODO_TASK` process
 
 ## v3.0 vs v4.0 Notes
 
 - **GETs use 4.0** -- richer JSON shape, supports `orderBy`, `history` and `payload` sub-resources
 - **POSTs/PUTs use 3.0** -- the v4.0 PUT endpoint returns error 76012 on most write operations
-- **Exception: ACQUIRE and SKIP_CURRENT_ASSIGNMENT** -- both require the 4.0 single-task endpoint `PUT /tasks/{number}` with body `{"action":{"id":"..."}}`. The 3.0 bulk endpoint returns HTTP 500 for these actions.
+- **Exceptions requiring 4.0 single-task endpoint** (`PUT /tasks/{number}`):
+  - `ACQUIRE` and `SKIP_CURRENT_ASSIGNMENT` -- 3.0 bulk endpoint returns HTTP 500
+  - `INFO_REQUEST` -- 3.0 bulk endpoint silently no-ops it (returns 200 but state never changes). Payload: `{"action":{"id":"INFO_REQUEST"},"identities":[{"id":"<user>","type":"user"}],"comment":{"commentStr":"...","commentScope":"TASK"}}`. Comment must be an object (plain string returns 400). The `"reason"` field is not a valid property.
 - **BPM API quirks**: `updatedAfter` query parameter is silently ignored; `updatedDate` in comments JSON is misspelled as `updateddDate` (double "d")
 
 ## Credential Strategy
