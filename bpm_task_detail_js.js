@@ -375,6 +375,36 @@
     });
 
     /* ================================================================== */
+    /*  Fusion deeplink — fetch TaskDisplayURL via atkPopupItems           */
+    /* ================================================================== */
+    $(document).on("click", ".bpm-fusion-link", function (e) {
+        e.preventDefault();
+        var $link    = $(this),
+            taskId   = $link.data("task-id"),
+            origHtml = $link.html();
+
+        if (!taskId) return;
+
+        $link.html('<span class="fa fa-refresh fa-anim-spin"></span>');
+
+        apex.server.process("GET_FUSION_DEEPLINK", { x01: taskId }, {
+            dataType: "json",
+            success: function (data) {
+                $link.html(origHtml);
+                if (data.url) {
+                    (window.top || window).open(data.url, "fusion_task");
+                } else {
+                    showError("No Fusion link found for this task. You may not have access.");
+                }
+            },
+            error: function () {
+                $link.html(origHtml);
+                showError("Error fetching Fusion link.");
+            }
+        });
+    });
+
+    /* ================================================================== */
     /*  History toggle — separate column                                   */
     /* ================================================================== */
     $(document).on("click", ".btask-history-toggle", function (e) {

@@ -38,6 +38,12 @@ SELECT '<button type="button" class="btask-toggle"
                aria-label="Approval History">
          <span class="fa fa-clock-o"></span>
        </button>' AS history_toggle,
+       CASE WHEN task_id IS NOT NULL THEN
+           '<a href="javascript:void(0)" class="bpm-fusion-link"'
+           || ' data-task-id="' || task_id || '"'
+           || ' title="View in Fusion">'
+           || '<span class="fa fa-external-link"></span></a>'
+       END AS fusion_link,
        task_number,
        title,
        INITCAP(REPLACE(
@@ -358,6 +364,50 @@ EXCEPTION
         apex_json.open_object;
         apex_json.write('status', 'ERROR');
         apex_json.write('message', SQLERRM);
+        apex_json.close_object;
+END;
+*/
+
+
+-- ---- GET_FUSION_DEEPLINK ----
+-- Name: GET_FUSION_DEEPLINK
+-- Ajax Callback on page 6004.
+-- x01 = task_id (GUID, from bpm_workflow_tasks.task_id)
+-- Calls atkPopupItems with the logged-in user's Fusion credential.
+-- Returns { url } — the TaskDisplayURL from Fusion, with correct task flow
+-- path and bpmWorklistContext for that user's session.
+-- Returns { url: '' } if the task is not visible to the user (no error thrown).
+
+/*
+DECLARE
+    l_task_id  VARCHAR2(64) := apex_application.g_x01;
+    l_response CLOB;
+    l_url      VARCHAR2(4000);
+BEGIN
+    l_response := apex_web_service.make_rest_request(
+        p_url                  => pkg_bicc_common.gc_fa_base_url
+                               || '/fscmRestApi/resources/11.13.18.05/atkPopupItems'
+                               || '?q=TaskId=' || l_task_id,
+        p_http_method          => 'GET',
+        p_credential_static_id => pkg_bpm_tasks.gc_user_credential
+    );
+
+    BEGIN
+        apex_json.parse(l_response);
+        l_url := apex_json.get_varchar2('items[1].TaskDisplayURL');
+    EXCEPTION
+        WHEN OTHERS THEN NULL;
+    END;
+
+    apex_json.open_object;
+    apex_json.write('url', NVL(l_url, ''));
+    apex_json.close_object;
+
+EXCEPTION
+    WHEN OTHERS THEN
+        apex_json.open_object;
+        apex_json.write('url', '');
+        apex_json.write('error', SQLERRM);
         apex_json.close_object;
 END;
 */
