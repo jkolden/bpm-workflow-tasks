@@ -154,42 +154,13 @@ create or replace PACKAGE BODY pkg_bpm_tasks AS
         l_url            VARCHAR2(1000);
         l_body           CLOB;
         l_response       CLOB;
-        l_task_response  CLOB;
         l_status         NUMBER;
         l_errmsg         VARCHAR2(4000);
-        l_action_count   NUMBER;
-        l_cred           VARCHAR2(50) := NVL(p_credential_id, gc_credential);
+        l_cred           VARCHAR2(50) := NVL(p_credential_id, gc_user_credential);
     BEGIN
-        -- Fetch task detail to check allowed actions — use caller's credential
-        -- so actionList reflects what that user is actually permitted to do.
-        l_url := pkg_bicc_common.gc_fa_base_url || '/bpm/api/4.0/tasks/' || p_task_number;
-
-        l_task_response := apex_web_service.make_rest_request(
-            p_url                  => l_url,
-            p_http_method          => 'GET',
-            p_credential_static_id => l_cred
-        );
-
-        SELECT COUNT(*)
-          INTO l_action_count
-          FROM JSON_TABLE(
-              l_task_response,
-              '$.actionList[*]'
-              COLUMNS (
-                  action_id VARCHAR2(100) PATH '$.actionId'
-              )
-          )
-         WHERE action_id = UPPER(p_action);
-
-        IF l_action_count = 0 THEN
-            raise_application_error(
-                -20001,
-                'Task ' || p_task_number || ' does not permit ' || UPPER(p_action)
-            );
-        END IF;
-
         -- ACQUIRE and SKIP_CURRENT_ASSIGNMENT use 4.0 single-task endpoint;
         -- INFO_REQUEST uses 4.0 endpoint with identities at top level;
+        -- INFO_SUBMIT uses 4.0 endpoint, no identities (routes back to requester);
         -- other actions (APPROVE, REJECT, etc.) use 3.0 bulk endpoint
         IF UPPER(p_action) IN ('ACQUIRE', 'SKIP_CURRENT_ASSIGNMENT') THEN
             l_url := pkg_bicc_common.gc_fa_base_url
@@ -208,6 +179,22 @@ create or replace PACKAGE BODY pkg_bpm_tasks AS
                    || ',"identities":[{"id":"'
                    || apex_escape.json(p_assignee_id)
                    || '","type":"' || NVL(p_assignee_type, 'user') || '"}]';
+
+            IF p_comment IS NOT NULL THEN
+                l_body := l_body || ',"comment":{"commentStr":"'
+                       || apex_escape.json(p_comment)
+                       || '","commentScope":"TASK"}';
+            END IF;
+
+            l_body := l_body || '}';
+
+        ELSIF UPPER(p_action) = 'INFO_SUBMIT' THEN
+            -- 4.0 single-task endpoint; no identities needed — routes back to requester.
+            -- Action ID confirmed from Oracle BPM API docs.
+            l_url  := pkg_bicc_common.gc_fa_base_url
+                   || '/bpm/api/4.0/tasks/' || p_task_number;
+
+            l_body := '{"action":{"id":"INFO_SUBMIT"}';
 
             IF p_comment IS NOT NULL THEN
                 l_body := l_body || ',"comment":{"commentStr":"'

@@ -592,6 +592,7 @@ END;
         'DELEGATE'               : 'Delegate',
         'ESCALATE'               : 'Escalate',
         'INFO_REQUEST'           : 'Request Information',
+        'INFO_SUBMIT'            : 'Submit Information',
         'PUSHBACK'               : 'Pushback',
         'REASSIGN'               : 'Reassign',
         'REJECT'                 : 'Reject',
