@@ -64,6 +64,11 @@ SELECT '<button type="button" class="btask-toggle"
        last_action_ts,
        last_action_status,
        last_action_response,
+       CASE WHEN last_action IS NOT NULL THEN
+           INITCAP(last_action)
+           || CASE WHEN last_action_ts IS NOT NULL
+                   THEN ' &middot; ' || TO_CHAR(last_action_ts, 'Mon DD') END
+       END AS last_action_summary,
        CASE WHEN state IN ('COMPLETED','WITHDRAWN','EXPIRED','ERRORED','SUSPENDED')
             THEN 'is-disabled' END AS action_css
   FROM bpm_workflow_tasks

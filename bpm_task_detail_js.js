@@ -473,7 +473,7 @@
 
         h += '<div class="btask-body">';
 
-        var history = historyData.history || [];
+        var history = (historyData.history || []).slice().reverse();
         if (history.length) {
             h += '<div class="btask-history-list">';
             for (var k = 0; k < history.length; k++) {
