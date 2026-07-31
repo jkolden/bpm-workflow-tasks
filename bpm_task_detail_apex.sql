@@ -67,7 +67,9 @@ SELECT '<button type="button" class="btask-toggle"
        CASE WHEN last_action IS NOT NULL AND last_action_status = 'OK' THEN
            INITCAP(last_action)
            || CASE WHEN last_action_ts IS NOT NULL
-                   THEN ' &middot; ' || TO_CHAR(last_action_ts, 'Mon DD') END
+                   THEN ' &middot; ' || TO_CHAR(
+                       FROM_TZ(last_action_ts, 'UTC') AT TIME ZONE 'US/Eastern',
+                       'Mon DD, YYYY HH:MI:SS AM') END
        END AS last_action_summary,
        CASE WHEN state IN ('COMPLETED','WITHDRAWN','EXPIRED','ERRORED','SUSPENDED')
             THEN 'is-disabled' END AS action_css
