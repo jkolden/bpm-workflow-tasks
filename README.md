@@ -25,7 +25,7 @@ Oracle APEX application for managing Fusion BPM approval tasks via REST API. Pro
 | `pkg_bpm_tasks.sql` | Package spec |
 | `pkg_bpm_tasks.plb` | Package body |
 | `bpm_task_detail_js.js` | JavaScript -- toggle panels, fetch/render payload details, comments, attachments, history; upload/download handlers |
-| `bpm_task_detail_css.css` | Styles -- amber for payload details, blue for comments, teal for attachments, purple for history |
+| `bpm_task_detail_css.css` | Styles -- amber for payload details, blue for comments, teal for attachments, redwood for history |
 | `bpm_task_detail_apex.sql` | APEX setup instructions + Ajax callback PL/SQL for pages 6003 and 6004 |
 | `bpm_task_details_bip.sql` | BIP-sourced task supplemental data DDL |
 | `f121_page_6004.sql` | APEX page export (faceted search) |
@@ -139,3 +139,15 @@ APEX's Fusion Auth integration automatically stores the logged-in user's Fusion 
 Set `gc_user_credential` in `pkg_bpm_tasks.sql` to the static ID of the APEX Web Credential configured for your Fusion Auth scheme.
 
 Base URL is sourced from `pkg_bicc_common.gc_fa_base_url`.
+
+## Known Issues
+
+### Fusion deep link unavailable for API-claimed tasks
+
+The "View in Fusion" deep link uses the `atkPopupItems` REST endpoint to generate a URL containing an encrypted `bpmWorklistContext` token. This only works for tasks that arrived through Fusion's notification routing (i.e., tasks that appear in the Notifications bell icon).
+
+Tasks claimed via the BPM API (e.g., ACQUIRE from APEX) update the BPM Worklist assignee but do **not** generate a Fusion notification event. As a result, `atkPopupItems` returns no URL for these tasks.
+
+The `bpmWorklistContext` token is encrypted and session-bound -- it cannot be reconstructed programmatically, and no alternative direct-link URL format exists on Fusion Cloud. The on-premise SOA Worklist URL (`/integration/worklistapp/faces/detail.jspx`) returns 404 on Cloud.
+
+**Impact**: Users who claim tasks from the APEX dashboard will see "No Fusion link found" when clicking the Fusion icon for those tasks. Tasks arriving through normal Fusion workflow (the vast majority in production) will have working deep links.

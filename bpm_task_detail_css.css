@@ -234,7 +234,7 @@ a.btask-attach-name:hover {
 .btask-history-panel {
     padding: 0;
     background: var(--ut-component-background-color, #fff);
-    border: 2px solid #7c3aed;
+    border: 2px solid #6d3f49;
     border-radius: 8px;
     max-width: 500px;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
@@ -242,7 +242,15 @@ a.btask-attach-name:hover {
 }
 
 .btask-header-history {
-    background: #7c3aed;
+    background: #6d3f49;
+}
+
+.btask-history-close {
+    color: rgba(255, 255, 255, 0.8) !important;
+}
+
+.btask-history-close:hover {
+    color: #fff !important;
 }
 
 .btask-history-list {
@@ -254,9 +262,9 @@ a.btask-attach-name:hover {
     padding: 6px 10px;
     margin-bottom: 4px;
     font-size: 13px;
-    background: linear-gradient(135deg, #f5f3ff 0%, #fff 100%);
+    background: linear-gradient(135deg, #faf5f6 0%, #fff 100%);
     border-radius: 6px;
-    border-left: 3px solid #7c3aed;
+    border-left: 3px solid #6d3f49;
 }
 
 .btask-history-future {
@@ -272,7 +280,7 @@ a.btask-attach-name:hover {
 
 .btask-history-action {
     font-weight: 400;
-    color: #7c3aed;
+    color: #6d3f49;
     font-style: italic;
 }
 
@@ -331,13 +339,23 @@ a.btask-attach-name:hover {
     border: none;
     padding: 4px 8px;
     font-size: 16px;
-    color: #7c3aed;
-    transition: transform 0.15s;
+    color: #6d3f49;
+    transition: transform 0.15s, color 0.15s;
 }
 
 .btask-history-toggle:hover {
-    color: #5b21b6;
+    color: #4a2a31;
     transform: scale(1.15);
+}
+
+/* Rotate clock icon when history panel is open */
+.btask-history-toggle .fa {
+    display: inline-block;
+    transition: transform 0.3s ease;
+}
+
+.btask-history-toggle.is-open .fa {
+    transform: rotate(360deg);
 }
 
 /* --- Last Action badge --- */
@@ -357,4 +375,527 @@ a.btask-attach-name:hover {
 .btask-la-error {
     background: #f8d7da;
     color: #721c24;
+}
+
+
+/* ==========================================================================
+   Page-Specific Styling — Header, Cards Layout, State Pills, Buttons
+   ========================================================================== */
+
+/*==============================================================
+  PAGE HEADER
+==============================================================*/
+
+#t_Body_title {
+    background-color: #252321;
+}
+
+.t-Breadcrumb-label {
+    color: #fff;
+}
+
+
+/*==============================================================
+  TASK CELL
+==============================================================*/
+
+.btask-cell {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1.5rem;
+    width: 100%;
+    min-width: 38rem;
+    padding: .6rem 0;
+    padding-left: 15px;
+    padding-right: 15px;
+}
+
+.btask-cell__content {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.btask-cell__title {
+    margin-bottom: .45rem;
+    font-size: 1rem;
+    font-weight: 600;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+}
+
+.btask-cell__meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .4rem;
+    margin-top: .25rem;
+    color: var(--ut-component-text-muted-color);
+    font-size: .9rem;
+    line-height: 1.45;
+}
+
+.btask-cell__meta + .btask-cell__meta {
+    margin-top: .4rem;
+}
+
+.btask-cell__task-number {
+    color: var(--ut-component-text-default-color);
+    font-size: 1rem;
+    font-weight: 700;
+}
+
+.btask-cell__separator {
+    opacity: .45;
+}
+
+.btask-cell__identity {
+    gap: .45rem;
+}
+
+.btask-cell__identity .task-state {
+    margin-left: .15rem;
+}
+
+.btask-cell__actions {
+    display: flex;
+    align-items: center;
+    gap: .45rem;
+    flex: 0 0 auto;
+    padding-top: .1rem;
+}
+
+
+/*==============================================================
+  TASK ICON BUTTONS
+==============================================================*/
+
+.btask-cell__actions .btask-toggle,
+.btask-cell__actions .btask-history-toggle,
+.btask-cell__actions .bpm-fusion-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.15rem;
+    height: 2.15rem;
+    padding: 0;
+    border: 0;
+    border-radius: .45rem;
+    text-decoration: none;
+    cursor: pointer;
+    transition:
+        background-color .15s ease,
+        transform .15s ease,
+        box-shadow .15s ease;
+}
+
+.btask-cell__actions .btask-toggle:hover,
+.btask-cell__actions .btask-history-toggle:hover,
+.btask-cell__actions .bpm-fusion-link:hover {
+    transform: translateY(-1px);
+}
+
+.btask-cell__actions .btask-toggle:focus-visible,
+.btask-cell__actions .btask-history-toggle:focus-visible,
+.btask-cell__actions .bpm-fusion-link:focus-visible,
+.btask-action-link:focus-visible {
+    outline: 2px solid var(--ut-palette-primary, #0572ce);
+    outline-offset: 2px;
+}
+
+/* Details */
+.btask-cell__actions .btask-toggle {
+    color: var(--ut-palette-primary, #0572ce);
+    background: rgba(5, 114, 206, .08);
+}
+
+.btask-cell__actions .btask-toggle:hover {
+    background: rgba(5, 114, 206, .16);
+}
+
+/* History */
+.btask-cell__actions .btask-history-toggle {
+    color: #6d3f49;
+    background: rgba(109, 63, 73, .08);
+}
+
+.btask-cell__actions .btask-history-toggle:hover {
+    background: rgba(109, 63, 73, .16);
+}
+
+/* Fusion */
+.btask-cell__actions .bpm-fusion-link {
+    color: var(--ut-link-text-color, #0066cc);
+    background: rgba(0, 102, 204, .08);
+}
+
+.btask-cell__actions .bpm-fusion-link:hover {
+    background: rgba(0, 102, 204, .16);
+}
+
+
+/*==============================================================
+  ROW ACTION BUTTON
+==============================================================*/
+
+.btask-action-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 2.15rem;
+    padding: 0 1rem;
+    color: #fff;
+    background: #58794b;
+    border-radius: .45rem;
+    font-size: .82rem;
+    font-weight: 600;
+    line-height: 1;
+    text-decoration: none;
+    white-space: nowrap;
+    transition:
+        background-color .15s ease,
+        transform .15s ease,
+        box-shadow .15s ease;
+}
+
+.btask-action-link:hover {
+    color: #fff;
+    background: #49673e;
+    text-decoration: none;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, .14);
+}
+
+.btask-action-link:active {
+    transform: translateY(0);
+    box-shadow: none;
+}
+
+.btask-action-link.is-disabled {
+    background: #a0a0a0;
+    pointer-events: none;
+    opacity: .55;
+}
+
+
+/*==============================================================
+  REPORT
+==============================================================*/
+
+#bpm_tasks_ir {
+    margin-left: .75rem;
+}
+
+#bpm_tasks_ir .a-IRR-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+#bpm_tasks_ir .a-IRR-table td {
+    vertical-align: top;
+}
+
+#bpm_tasks_ir .a-IRR-table td:first-child {
+    width: 100%;
+}
+
+#bpm_tasks_ir .a-IRR-table tbody tr {
+    transition:
+        background-color .15s ease,
+        box-shadow .15s ease;
+}
+
+#bpm_tasks_ir .a-IRR-table tbody tr:hover {
+    background-color: rgba(37, 35, 33, .018);
+}
+
+#bpm_tasks_ir .a-IRR-table tbody td {
+    border-bottom-color: rgba(37, 35, 33, .10);
+}
+
+
+/*==============================================================
+  TASK STATE PILLS
+==============================================================*/
+
+#bpm_tasks_ir .task-state {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+    padding: 3px 9px;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+#bpm_tasks_ir .task-state--ASSIGNED {
+    color: #1f6b3a;
+    background: #e8f4e8;
+    border-color: #cce6cf;
+}
+
+#bpm_tasks_ir .task-state--COMPLETED {
+    color: #375f91;
+    background: #eaf2fb;
+    border-color: #cfdeef;
+}
+
+#bpm_tasks_ir .task-state--INFO_REQUESTED {
+    color: #8a5a00;
+    background: #fff5d8;
+    border-color: #efd89a;
+}
+
+#bpm_tasks_ir .task-state--WAITING {
+    color: #6b7280;
+    background: #f3f4f6;
+    border-color: #d1d5db;
+}
+
+#bpm_tasks_ir .task-state--SUSPENDED {
+    color: #6d3f49;
+    background: #faf5f6;
+    border-color: #d4a0ab;
+}
+
+#bpm_tasks_ir .task-state--WITHDRAWN {
+    color: #92400e;
+    background: #fef3c7;
+    border-color: #fcd34d;
+}
+
+#bpm_tasks_ir .task-state--REJECTED,
+#bpm_tasks_ir .task-state--ERROR {
+    color: #991b1b;
+    background: #fee2e2;
+    border-color: #fecaca;
+}
+
+
+/*==============================================================
+  TASK AGE
+==============================================================*/
+
+.task-age {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    color: var(--ut-component-text-muted-color);
+    font-size: .82rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.task-age__dot {
+    display: inline-block;
+    flex: 0 0 10px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+}
+
+.task-age--fresh .task-age__dot   { background: #4ade80; }
+.task-age--warning .task-age__dot { background: #f4c542; }
+.task-age--old .task-age__dot     { background: #fb923c; }
+.task-age--stale .task-age__dot   { background: #e11d48; }
+
+
+/*==============================================================
+  BREADCRUMB ACTION AREA
+==============================================================*/
+
+.t-BreadcrumbRegion-buttons--end {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    padding-top: 1px;
+    padding-right: .5rem;
+}
+
+
+/*==============================================================
+  CREATE TO DO BUTTON
+==============================================================*/
+
+.t-BreadcrumbRegion .t-Button[data-otel-label="CREATE"] {
+    height: 46px;
+    min-width: 170px;
+    margin: 0;
+    padding: 0 1.5rem;
+    color: #fff;
+    background: #4f8a22;
+    border: none;
+    border-radius: 10px;
+    font-size: .95rem;
+    font-weight: 600;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, .18);
+    transition:
+        background-color .15s ease,
+        transform .08s ease,
+        box-shadow .15s ease;
+}
+
+.t-BreadcrumbRegion .t-Button[data-otel-label="CREATE"]:hover {
+    color: #fff;
+    background: #3f7318;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, .20);
+}
+
+.t-BreadcrumbRegion .t-Button[data-otel-label="CREATE"]:active {
+    color: #fff;
+    background: #356214;
+    transform: translateY(1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, .18);
+}
+
+.t-BreadcrumbRegion .t-Button[data-otel-label="CREATE"] .t-Icon--left {
+    margin-right: .55rem;
+    font-size: 1rem;
+}
+
+.t-BreadcrumbRegion .t-Button[data-otel-label="CREATE"] .t-Icon--right {
+    display: none;
+}
+
+
+/*==============================================================
+  MORE BUTTON
+==============================================================*/
+
+.t-BreadcrumbRegion .t-Button[data-otel-label="more"] {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    min-width: 40px;
+    height: 46px;
+    margin: 0;
+    padding: 0;
+    color: #fff !important;
+    background: rgba(255, 255, 255, .08);
+    border: 1px solid rgba(255, 255, 255, .06);
+    border-radius: 10px;
+    box-shadow: none;
+    transition:
+        background-color .15s ease,
+        border-color .15s ease,
+        transform .08s ease;
+}
+
+.t-BreadcrumbRegion .t-Button[data-otel-label="more"]:hover {
+    color: #fff !important;
+    background: rgba(255, 255, 255, .14);
+    border-color: rgba(255, 255, 255, .10);
+}
+
+.t-BreadcrumbRegion .t-Button[data-otel-label="more"]:active {
+    color: #fff !important;
+    background: rgba(255, 255, 255, .20);
+    transform: translateY(1px);
+}
+
+.t-BreadcrumbRegion .t-Button[data-otel-label="more"] .t-Icon {
+    margin: 0;
+    font-size: 1.1rem;
+}
+
+
+/*==============================================================
+  BREADCRUMB BUTTON FOCUS
+==============================================================*/
+
+.t-BreadcrumbRegion .t-Button[data-otel-label="CREATE"]:focus-visible {
+    outline: none;
+    box-shadow:
+        0 0 0 3px rgba(79, 138, 34, .35),
+        0 2px 6px rgba(0, 0, 0, .18);
+}
+
+.t-BreadcrumbRegion .t-Button[data-otel-label="more"]:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, .20);
+}
+
+
+/*==============================================================
+  BREADCRUMB BUTTON DISABLED STATE
+==============================================================*/
+
+.t-BreadcrumbRegion .t-Button[data-otel-label="CREATE"]:disabled,
+.t-BreadcrumbRegion .t-Button[data-otel-label="more"]:disabled {
+    opacity: .5;
+    cursor: default;
+    transform: none;
+    box-shadow: none;
+}
+
+
+/*==============================================================
+  UTILITIES
+==============================================================*/
+
+.is-hidden {
+    display: none !important;
+}
+
+
+/*==============================================================
+  RESPONSIVE
+==============================================================*/
+
+@media (max-width: 900px) {
+    #bpm_tasks_ir {
+        margin-left: 0;
+    }
+
+    .btask-cell {
+        min-width: 0;
+        gap: 1rem;
+    }
+
+    .btask-cell__actions {
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+
+    .t-BreadcrumbRegion .t-Button[data-otel-label="CREATE"] {
+        min-width: 0;
+        padding-right: 1.15rem;
+        padding-left: 1.15rem;
+    }
+}
+
+@media (max-width: 640px) {
+    .btask-cell {
+        flex-direction: column;
+    }
+
+    .btask-cell__actions {
+        width: 100%;
+        justify-content: flex-start;
+        padding-top: .25rem;
+    }
+
+    .t-BreadcrumbRegion-buttons--end {
+        gap: .35rem;
+        padding-right: 0;
+    }
+
+    .t-BreadcrumbRegion .t-Button[data-otel-label="CREATE"] {
+        height: 42px;
+        padding-right: .9rem;
+        padding-left: .9rem;
+        border-radius: 8px;
+    }
+
+    .t-BreadcrumbRegion .t-Button[data-otel-label="more"] {
+        width: 38px;
+        min-width: 38px;
+        height: 42px;
+        border-radius: 8px;
+    }
 }

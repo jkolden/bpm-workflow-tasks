@@ -42,7 +42,8 @@
         });
 
         // Flip icon
-        $btn.find(".fa-folder-o")
+        $btn.addClass("is-open")
+            .find(".fa-folder-o")
             .removeClass("fa-folder-o")
             .addClass("fa-folder-open");
 
@@ -381,6 +382,7 @@
         e.preventDefault();
         var $link    = $(this),
             taskId   = $link.data("task-id"),
+            taskNum  = $link.closest("tr").find(".btask-toggle").data("task-number"),
             origHtml = $link.html();
 
         if (!taskId) return;
@@ -388,7 +390,9 @@
         apex.message.clearErrors();
         $link.html('<span class="fa fa-refresh fa-anim-spin"></span>');
 
-        apex.server.process("GET_FUSION_DEEPLINK", { x01: taskId }, {
+        apex.server.process("GET_FUSION_DEEPLINK",
+            { x01: taskId, x02: String(taskNum || "") },
+        {
             dataType: "json",
             success: function (data) {
                 $link.html(origHtml);
@@ -429,9 +433,10 @@
             collapseHistory($(this), $prev);
         });
 
-        $btn.find(".fa-clock-o")
+        $btn.addClass("is-open")
+            .find(".fa-clock-o")
             .removeClass("fa-clock-o")
-            .addClass("fa-clock");
+            .addClass("fa-calendar-clock");
 
         var colSpan    = $tr.children("td").length,
             $histRow = $(
@@ -524,11 +529,13 @@
     $(document).on("apexafterrefresh", function () {
         $(".btask-detail-row").remove();
         $(".btask-history-row").remove();
-        $(".btask-toggle .fa-folder-open")
+        $(".btask-toggle").removeClass("is-open")
+            .find(".fa-folder-open")
             .removeClass("fa-folder-open")
             .addClass("fa-folder-o");
-        $(".btask-history-toggle .fa-clock")
-            .removeClass("fa-clock")
+        $(".btask-history-toggle").removeClass("is-open")
+            .find(".fa-calendar-clock")
+            .removeClass("fa-calendar-clock")
             .addClass("fa-clock-o");
     });
 
@@ -538,7 +545,8 @@
     function collapse($detailRow, $btn) {
         $detailRow.slideUp(150, function () { $detailRow.remove(); });
         if ($btn && $btn.length) {
-            $btn.find(".fa-folder-open")
+            $btn.removeClass("is-open")
+                .find(".fa-folder-open")
                 .removeClass("fa-folder-open")
                 .addClass("fa-folder-o");
         }
@@ -547,8 +555,9 @@
     function collapseHistory($histRow, $btn) {
         $histRow.slideUp(150, function () { $histRow.remove(); });
         if ($btn && $btn.length) {
-            $btn.find(".fa-clock")
-                .removeClass("fa-clock")
+            $btn.removeClass("is-open")
+                .find(".fa-calendar-clock")
+                .removeClass("fa-calendar-clock")
                 .addClass("fa-clock-o");
         }
     }
@@ -596,3 +605,40 @@
     }
 
 })();
+
+/* ================================================================== */
+/*  Page-level facet helpers (global scope for DA / button use)        */
+/* ================================================================== */
+function setFacetFilter(facetItem, value) {
+    var val = Array.isArray(value) ? value.join("|||") : value;
+    apex.item(facetItem).setValue(val);
+    apex.region("facet-search").refresh();
+}
+
+function clearFacetFilter(facetItem) {
+    apex.item(facetItem).setValue("");
+    apex.region("facet-search").refresh();
+}
+
+function toggleMyTasks(facetItem, value) {
+    var current = apex.item(facetItem).getValue();
+    if (current && current === value) {
+        clearFacetFilter(facetItem);
+    } else {
+        setFacetFilter(facetItem, value);
+    }
+}
+
+// Re-label the menu item every time the popup menu opens
+$(document).on("menubeforeopen", function () {
+    setTimeout(function () {
+        var isSet = apex.item("P6204_ASSIGNEE_ID").getValue() !== "";
+        $(".a-Menu-label").filter(function () {
+            var t = $(this).text();
+            return t === "Show my Tasks" || t === "Clear my Tasks";
+        }).text(isSet ? "Clear my Tasks" : "Show my Tasks")
+          .siblings("[class*='fa-filter']")
+          .removeClass("fa-filter fa-filter-remove")
+          .addClass(isSet ? "fa-filter-remove" : "fa-filter");
+    }, 0);
+})

@@ -63,7 +63,9 @@ SELECT '<button type="button" class="btask-toggle"
        last_action,
        last_action_ts,
        last_action_status,
-       last_action_response
+       last_action_response,
+       CASE WHEN state IN ('COMPLETED','WITHDRAWN','EXPIRED','ERRORED','SUSPENDED')
+            THEN 'is-disabled' END AS action_css
   FROM bpm_workflow_tasks
 */
 
@@ -374,16 +376,19 @@ END;
 -- Name: GET_FUSION_DEEPLINK
 -- Ajax Callback on page 6004.
 -- x01 = task_id (GUID, from bpm_workflow_tasks.task_id)
+-- x02 = task_number (fallback for direct Worklist URL)
 -- Calls atkPopupItems with the logged-in user's Fusion credential.
 -- Returns { url } — the TaskDisplayURL from Fusion, with correct task flow
 -- path and bpmWorklistContext for that user's session.
--- Returns { url: '' } if the task is not visible to the user (no error thrown).
+-- Falls back to direct BPM Worklist URL if atkPopupItems returns empty
+-- (e.g. tasks claimed via API that didn't generate a Fusion notification).
 
 /*
 DECLARE
-    l_task_id  VARCHAR2(64) := apex_application.g_x01;
-    l_response CLOB;
-    l_url      VARCHAR2(4000);
+    l_task_id     VARCHAR2(64)   := apex_application.g_x01;
+    l_task_number VARCHAR2(20)   := apex_application.g_x02;
+    l_response    CLOB;
+    l_url         VARCHAR2(4000);
 BEGIN
     l_response := apex_web_service.make_rest_request(
         p_url                  => pkg_bicc_common.gc_fa_base_url
@@ -596,6 +601,7 @@ END;
         'PUSHBACK'               : 'Pushback',
         'REASSIGN'               : 'Reassign',
         'REJECT'                 : 'Reject',
+        'RELEASE'                : 'Release',
         'RESUME'                 : 'Resume',
         'SKIP_CURRENT_ASSIGNMENT': 'Skip Current Assignment',
         'SUSPEND'                : 'Suspend',
@@ -606,7 +612,7 @@ END;
     // Auto-populate with the task submitter's Fusion user ID (P6003_FROM_USER)
     // when INFO_REQUEST is chosen — user can override if needed.
     apex.item('P6003_ACTION').node.addEventListener('change', function () {
-        var needsAssignee = (this.value === 'INFO_REQUEST');
+        var needsAssignee = {'INFO_REQUEST':1,'DELEGATE':1,'REASSIGN':1}.hasOwnProperty(this.value);
         $('#P6003_ASSIGNEE').closest('.t-Form-fieldContainer')
             .toggle(needsAssignee);
         if (needsAssignee) {
@@ -663,9 +669,9 @@ END;
         var assigneeId = $v('P6003_ASSIGNEE') || '';
         if (!action) { apex.message.showErrors([{ type: 'error', location: 'page',
             message: 'Please select an action.' }]); return; }
-        if (action === 'INFO_REQUEST' && !assigneeId.trim()) {
+        if ({'INFO_REQUEST':1,'DELEGATE':1,'REASSIGN':1}.hasOwnProperty(action) && !assigneeId.trim()) {
             apex.message.showErrors([{ type: 'error', location: 'page',
-                message: 'Please enter the Fusion user ID to request information from.' }]);
+                message: 'Please enter the Fusion user ID.' }]);
             return;
         }
 

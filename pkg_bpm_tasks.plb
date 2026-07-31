@@ -32,6 +32,9 @@ create or replace PACKAGE BODY pkg_bpm_tasks AS
                   || '&status=EXPIRED'
                   || '&status=ERRORED'
                   || '&status=SUSPENDED'
+                  || '&status=INFO_REQUESTED'
+                  || '&status=ALERTED'
+                  || '&status=OUTCOME_UPDATED'
                   || '&orderBy=updatedDate:desc'
                   || '&limit='  || c_limit
                   || '&offset=' || l_offset;
