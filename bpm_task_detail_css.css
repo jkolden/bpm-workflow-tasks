@@ -571,7 +571,8 @@ a.btask-attach-name:hover {
     box-shadow: none;
 }
 
-.btask-action-link.is-disabled {
+.btask-action-link.is-disabled,
+.is-disabled .btask-action-link {
     background: #a0a0a0;
     pointer-events: none;
     opacity: .55;
