@@ -146,8 +146,8 @@ Base URL is sourced from `pkg_bicc_common.gc_fa_base_url`.
 
 The "View in Fusion" deep link uses the `atkPopupItems` REST endpoint to generate a URL containing an encrypted `bpmWorklistContext` token. This only works for tasks that arrived through Fusion's notification routing (i.e., tasks that appear in the Notifications bell icon).
 
-Tasks claimed via the BPM API (e.g., ACQUIRE from APEX) update the BPM Worklist assignee but do **not** generate a Fusion notification event. As a result, `atkPopupItems` returns no URL for these tasks.
+Tasks claimed through the BPM REST API (for example, using ACQUIRE from APEX) update the BPM Worklist assignee but do not receive the Fusion worklist context required for deep-link generation. Consequently, `atkPopupItems` returns no Fusion URL.
 
-The `bpmWorklistContext` token is encrypted and session-bound -- it cannot be reconstructed programmatically, and no alternative direct-link URL format exists on Fusion Cloud. The on-premise SOA Worklist URL (`/integration/worklistapp/faces/detail.jspx`) returns 404 on Cloud.
+The `bpmWorklistContext` token is encrypted and session-bound -- it cannot be reconstructed programmatically. No documented or publicly supported alternative deep-link format exists on Fusion Cloud. The on-premise SOA Worklist URL (`/integration/worklistapp/faces/detail.jspx`) returns 404 on Cloud.
 
 **Impact**: Users who claim tasks from the APEX dashboard will see "No Fusion link found" when clicking the Fusion icon for those tasks. Tasks arriving through normal Fusion workflow (the vast majority in production) will have working deep links.
