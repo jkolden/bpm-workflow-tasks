@@ -64,7 +64,7 @@ SELECT '<button type="button" class="btask-toggle"
        last_action_ts,
        last_action_status,
        last_action_response,
-       CASE WHEN last_action IS NOT NULL THEN
+       CASE WHEN last_action IS NOT NULL AND last_action_status = 'OK' THEN
            INITCAP(last_action)
            || CASE WHEN last_action_ts IS NOT NULL
                    THEN ' &middot; ' || TO_CHAR(last_action_ts, 'Mon DD') END
