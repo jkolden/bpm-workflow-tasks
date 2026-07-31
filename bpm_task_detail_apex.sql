@@ -489,7 +489,7 @@ END;
 --   P6003_ASSIGNEE     - Text Field (Fusion user ID, shown only for INFO_REQUEST)
 --                        Label: "Request Info From (User ID)"
 --                        Server-side Condition: Never (shown/hidden via JS)
---   P6003_FROM_USER    - Hidden item, stores from_user_name of the task submitter
+--   P6003_FROM_USER_NAME    - Hidden item, stores from_user_name of the task submitter
 --                        Type: Hidden
 --                        Value Protected: No
 --                        (Passed in from the page 6004 Link Builder as #FROM_USER_NAME#)
@@ -497,7 +497,7 @@ END;
 -- Link Builder on page 6004 (the button/link that opens page 6003):
 --   Set Items must include BOTH:
 --     P6003_TASK_NUMBER = #TASK_NUMBER#
---     P6003_FROM_USER   = #FROM_USER_NAME#
+--     P6003_FROM_USER_NAME   = #FROM_USER_NAME#
 --
 -- P6003_ACTION configuration:
 --   Type:           Select List
@@ -609,7 +609,7 @@ END;
     };
 
     // Show/hide the assignee field based on action selection.
-    // Auto-populate with the task submitter's Fusion user ID (P6003_FROM_USER)
+    // Auto-populate with the task submitter's Fusion user ID (P6003_FROM_USER_NAME)
     // when INFO_REQUEST is chosen — user can override if needed.
     apex.item('P6003_ACTION').node.addEventListener('change', function () {
         var needsAssignee = {'INFO_REQUEST':1,'DELEGATE':1,'REASSIGN':1}.hasOwnProperty(this.value);
@@ -618,7 +618,7 @@ END;
         if (needsAssignee) {
             // Pre-fill with submitter's user ID; only override if currently empty
             if (!$v('P6003_ASSIGNEE').trim()) {
-                $s('P6003_ASSIGNEE', $v('P6003_FROM_USER') || '');
+                $s('P6003_ASSIGNEE', $v('P6003_FROM_USER_NAME') || '');
             }
         } else {
             $s('P6003_ASSIGNEE', '');
