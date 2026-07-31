@@ -1,3 +1,6 @@
+# BIP reference SQL (not part of the APEX app)
+bpm_task_details_bip.sql
+
 # Test files
 sample-pdf.pdf
 test.json

@@ -27,7 +27,6 @@ Oracle APEX application for managing Fusion BPM approval tasks via REST API. Pro
 | `bpm_task_detail_js.js` | JavaScript -- toggle panels, fetch/render payload details, comments, attachments, history; upload/download handlers |
 | `bpm_task_detail_css.css` | Styles -- amber for payload details, blue for comments, teal for attachments, redwood for history |
 | `bpm_task_detail_apex.sql` | APEX setup instructions + Ajax callback PL/SQL for pages 6003 and 6004 |
-| `bpm_task_details_bip.sql` | BIP-sourced task supplemental data DDL |
 | `f147.sql` | Standalone APEX application export |
 
 ## API Endpoints Used
