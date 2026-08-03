@@ -2,6 +2,8 @@
 
 Oracle APEX application for managing Fusion BPM approval tasks via REST API. Provides a faceted search dashboard with inline detail panels for comments, attachments, and approval history -- plus the ability to take actions (approve, reject, reassign, etc.) directly from APEX.
 
+![BPM Task Dashboard](example-screenshot.jpg)
+
 ## Features
 
 - **Task Dashboard** -- Faceted search page (6004) displaying all pending BPM workflow tasks with status, assignee, priority, and days pending
