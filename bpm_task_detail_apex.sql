@@ -30,6 +30,7 @@
 SELECT '<button type="button" class="btask-toggle"
                data-task-number="' || task_number || '"
                data-task-state="' || state || '"
+               data-task-id="' || NVL(task_id, '') || '"
                aria-label="Task Details">
          <span class="fa fa-folder-o"></span>
        </button>' AS detail_toggle,
@@ -39,12 +40,29 @@ SELECT '<button type="button" class="btask-toggle"
          <span class="fa fa-clock-o"></span>
        </button>' AS history_toggle,
        CASE WHEN task_id IS NOT NULL THEN
+           '<button type="button" class="btask-notif-toggle"'
+           || ' data-task-id="' || task_id || '"'
+           || ' aria-label="Notification Content">'
+           || '<span class="fa fa-file-text-o"></span></button>'
+       END AS notif_toggle,
+       CASE WHEN task_id IS NOT NULL THEN
            '<a href="javascript:void(0)" class="bpm-fusion-link"'
            || ' data-task-id="' || task_id || '"'
            || ' title="View in Fusion">'
            || '<span class="fa fa-external-link"></span></a>'
        END AS fusion_link,
+       CASE
+           WHEN last_action IS NULL THEN NULL
+           ELSE '<span class="btask-la btask-la-' || LOWER(NVL(last_action_status, 'ok')) || '"'
+             || ' title="' || TO_CHAR(last_action_ts, 'MM/DD/YY HH24:MI')
+             || CASE WHEN last_action_response IS NOT NULL
+                     THEN '&#10;' || last_action_response END
+             || '">'
+             || INITCAP(REPLACE(last_action, '_', ' '))
+             || '</span>'
+       END AS last_action_html,
        task_number,
+       TO_CHAR(task_number) AS task_number_vc,
        title,
        INITCAP(REPLACE(
            REGEXP_REPLACE(task_def_name, '([a-z])([A-Z])', '\1 \2'),
@@ -54,7 +72,6 @@ SELECT '<button type="button" class="btask-toggle"
        assignee_type,
        created_by,
        from_user_display   AS submitted_by,
-       from_user_name,
        assigned_ts,
        ROUND(SYSDATE - CAST(assigned_ts AS DATE)) AS days_pending,
        priority,
@@ -64,15 +81,71 @@ SELECT '<button type="button" class="btask-toggle"
        last_action_ts,
        last_action_status,
        last_action_response,
+       from_user_name,
+       APEX_UTIL.PREPARE_URL(
+           'f?p=' || :APP_ID || ':6003:' || :APP_SESSION ||
+           '::NO:6003:P6003_TASK_NUMBER,P6003_FROM_USER_NAME:' ||
+           task_number || ',' || from_user_name
+       ) AS actions_url,
+       '<span class="task-state task-state--'
+           || REPLACE(state,' ','_')
+           || '">'
+           || INITCAP(REPLACE(state,'_',' '))
+           || '</span>' AS state_html,
+       CASE
+           WHEN ROUND(SYSDATE - CAST(assigned_ts AS DATE)) < 14 THEN 'fresh'
+           WHEN ROUND(SYSDATE - CAST(assigned_ts AS DATE)) < 30 THEN 'warning'
+           WHEN ROUND(SYSDATE - CAST(assigned_ts AS DATE)) < 90 THEN 'old'
+           ELSE 'stale'
+       END AS age_class,
+       CASE
+           WHEN from_user_display IS NULL THEN 'is-hidden'
+       END AS submitted_class,
+       CASE
+           WHEN assignee_id IS NULL THEN 'is-hidden'
+       END AS assignee_class,
+       CASE
+           WHEN from_user_display IS NULL
+             OR assignee_id IS NULL
+           THEN 'is-hidden'
+       END AS people_separator_class,
+       CASE
+           WHEN from_user_display IS NULL
+            AND assignee_id IS NULL
+           THEN 'is-hidden'
+       END AS age_separator_class,
+       CASE
+           WHEN NULLIF(TRIM(INITCAP(REPLACE(
+               REGEXP_REPLACE(task_def_name, '([a-z])([A-Z])', '\1 \2'),
+               'Approval', ''))), '') IS NULL
+           THEN 'is-hidden'
+       END AS task_type_class,
+       CASE
+           WHEN category IS NULL THEN 'is-hidden'
+       END AS category_class,
+       CASE
+           WHEN NULLIF(TRIM(INITCAP(REPLACE(
+               REGEXP_REPLACE(task_def_name, '([a-z])([A-Z])', '\1 \2'),
+               'Approval', ''))), '') IS NULL
+             OR category IS NULL
+           THEN 'is-hidden'
+       END AS task_category_separator_class,
+       CASE
+           WHEN NULLIF(TRIM(INITCAP(REPLACE(
+               REGEXP_REPLACE(task_def_name, '([a-z])([A-Z])', '\1 \2'),
+               'Approval', ''))), '') IS NULL
+            AND category IS NULL
+           THEN 'is-hidden'
+       END AS before_task_info_separator_class,
+       CASE WHEN state IN ('COMPLETED', 'WITHDRAWN')
+            THEN 'is-disabled' END AS action_css,
        CASE WHEN last_action IS NOT NULL AND last_action_status = 'OK' THEN
            INITCAP(last_action)
            || CASE WHEN last_action_ts IS NOT NULL
                    THEN ' &middot; ' || TO_CHAR(
                        FROM_TZ(last_action_ts, 'UTC') AT TIME ZONE 'US/Eastern',
                        'Mon DD, YYYY HH:MI:SS AM') END
-       END AS last_action_summary,
-       CASE WHEN state IN ('COMPLETED','WITHDRAWN','EXPIRED','ERRORED','SUSPENDED')
-            THEN 'is-disabled' END AS action_css
+       END AS last_action_summary
   FROM bpm_workflow_tasks
 */
 
@@ -94,41 +167,18 @@ SELECT '<button type="button" class="btask-toggle"
 -- Column Alignment:          Center
 -- Width:                     48
 
+-- Configure the NOTIF_TOGGLE column the same way:
+-- Column Alias:              NOTIF_TOGGLE
+-- Heading:                   (leave blank)
+-- Column Type:               Plain Text
+-- Escape Special Characters: No
+-- Column Alignment:          Center
+-- Width:                     48
+
 -- =============================================================================
--- STEP 5: Ajax Callbacks — create six processes on page 6004
+-- STEP 5: Ajax Callbacks on page 6204
 -- =============================================================================
 -- Process Point: Ajax Callback  |  Type: PL/SQL Code
-
--- ---- GET_TASK_PAYLOAD ----
--- Name: GET_TASK_PAYLOAD
--- Thin wrapper — all parsing logic lives in pkg_bpm_tasks.emit_payload_fields.
--- To add a new task type: add an ELSIF branch to emit_payload_fields
--- in pkg_bpm_tasks.plb and recompile.  No changes needed here.
-
-/*
-DECLARE
-    l_task_number NUMBER := TO_NUMBER(apex_application.g_x01);
-BEGIN
-    apex_json.open_object;
-    apex_json.write('status', 'OK');
-    apex_json.open_array('fields');
-    pkg_bpm_tasks.emit_payload_fields(l_task_number);
-    apex_json.close_array;
-    apex_json.close_object;
-EXCEPTION
-    WHEN NO_DATA_FOUND THEN
-        apex_json.open_object;
-        apex_json.write('status', 'ERROR');
-        apex_json.write('message', 'Task ' || l_task_number || ' not found.');
-        apex_json.close_object;
-    WHEN OTHERS THEN
-        apex_json.open_object;
-        apex_json.write('status', 'ERROR');
-        apex_json.write('message', SQLERRM);
-        apex_json.close_object;
-END;
-*/
-
 
 -- ---- GET_TASK_COMMENTS ----
 -- Name: GET_TASK_COMMENTS
@@ -426,6 +476,68 @@ END;
 */
 
 
+-- ---- GET_EDIT_DEEPLINK ----
+-- Name: GET_EDIT_DEEPLINK
+-- Ajax Callback on page 6004.
+-- x01 = task_id (GUID, from bpm_workflow_tasks.task_id)
+-- Calls businessProcessNotifications/action/getDeeplinkUrlForEditAction via
+-- pkg_bpm_tasks.get_deeplink_url.  Returns { url } — the Redwood transaction
+-- URL (TRANSFER, HIRE, etc.).  Returns empty string if not editable.
+-- NOTE: distinct from GET_FUSION_DEEPLINK (which links to the notification bell).
+-- IMPORTANT: pkg_bpm_tasks.get_deeplink_url uses gc_user_credential, NOT gc_credential.
+-- The Fusion API returns EDIT:false for service accounts (gcs_reports) — must use
+-- the logged-in user's credential (helpdesk.test or equivalent Fusion auth cred).
+
+/*
+DECLARE
+    l_task_id VARCHAR2(64)   := apex_application.g_x01;
+    l_url     VARCHAR2(4000);
+BEGIN
+    l_url := pkg_bpm_tasks.get_deeplink_url(l_task_id);
+
+    apex_json.open_object;
+    apex_json.write('url', NVL(l_url, ''));
+    apex_json.close_object;
+
+EXCEPTION
+    WHEN OTHERS THEN
+        apex_json.open_object;
+        apex_json.write('url', '');
+        apex_json.write('error', SQLERRM);
+        apex_json.close_object;
+END;
+*/
+
+
+-- ---- GET_NOTIFICATION_CONTENT ----
+-- Name: GET_NOTIFICATION_CONTENT
+-- Ajax Callback on page 6204.
+-- x01 = task_id (GUID, e.g. 'a118e9ba-ffe5-40e7-9a09-186dd355687c')
+-- Fetches rendered BIP notification HTML from HCM REST endpoint.
+-- Returns { status, html } — the full HTML that Fusion renders in the bell icon.
+
+/*
+DECLARE
+    l_task_id VARCHAR2(64) := apex_application.g_x01;
+    l_html    CLOB;
+BEGIN
+    l_html := pkg_bpm_tasks.get_notification_content(l_task_id);
+
+    apex_json.open_object;
+    apex_json.write('status', 'OK');
+    apex_json.write('html', l_html);
+    apex_json.close_object;
+
+EXCEPTION
+    WHEN OTHERS THEN
+        apex_json.open_object;
+        apex_json.write('status', 'ERROR');
+        apex_json.write('message', SQLERRM);
+        apex_json.close_object;
+END;
+*/
+
+
 -- =============================================================================
 -- STEP 6: New Todo — drawer form page (e.g. page 6104)
 -- =============================================================================
@@ -710,8 +822,9 @@ END;
 --                            updatedBy, updatedDate, uri: {href, rel:"stream"} }] }
 --
 -- Credentials:
---   Read-only calls (GET_TASK_PAYLOAD, GET_TASK_COMMENTS, GET_TASK_ATTACHMENTS,
---   GET_TASK_HISTORY, DOWNLOAD_TASK_ATTACHMENT): use gc_credential (admin, gcs_reports).
+--   Read-only calls (GET_NOTIFICATION_CONTENT, GET_TASK_COMMENTS,
+--   GET_TASK_ATTACHMENTS, GET_TASK_HISTORY, DOWNLOAD_TASK_ATTACHMENT):
+--   use gc_credential (admin, gcs_reports).
 --   User-action calls (GET_TASK_ACTIONS, ACTION_TASK): use gc_user_credential so the
 --   BPM actionList and audit trail reflect the real user, not the admin account.
 --   Both constants are defined in pkg_bpm_tasks — no page items or client-side

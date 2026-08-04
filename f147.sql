@@ -32089,7 +32089,7 @@ wwv_flow_imp_page.create_page(
 '    var tn = $(this).data("task-number");',
 '    if (tn) {',
 '        apex.navigation.dialog(',
-'            "f?p=" + $v("pFlowId") + ":6003:" + $v("pInstance") + "::NO::P6003_TASK_NUMBER:" + tn,',
+'            "f?p=" + $v("pFlowId") + ":6003:" + $v("pInstance") + "::NO:6003:P6003_TASK_NUMBER:" + tn,',
 '            { title: "Task #" + tn, height: "auto", width: 580, maxWidth: 620, modal: true, resizable: true }',
 '        );',
 '    }',

@@ -172,12 +172,12 @@ create or replace PACKAGE BODY pkg_bpm_tasks AS
             l_body := '{"action":{"id":"' || UPPER(p_action) || '"}}';
 
         ELSIF UPPER(p_action) = 'INFO_REQUEST' THEN
+
             -- 4.0 single-task endpoint; identities at top level (not inside action).
             -- comment object is included inline when provided — appears in task
             -- comments (not history). Tested: 200 received; verify via /comments.
             l_url  := pkg_bicc_common.gc_fa_base_url
                    || '/bpm/api/4.0/tasks/' || p_task_number;
-
             l_body := '{"action":{"id":"INFO_REQUEST"}'
                    || ',"identities":[{"id":"'
                    || apex_escape.json(p_assignee_id)
@@ -190,6 +190,7 @@ create or replace PACKAGE BODY pkg_bpm_tasks AS
             END IF;
 
             l_body := l_body || '}';
+
 
         ELSIF UPPER(p_action) = 'INFO_SUBMIT' THEN
             -- 4.0 single-task endpoint; no identities needed — routes back to requester.
@@ -255,6 +256,7 @@ create or replace PACKAGE BODY pkg_bpm_tasks AS
                                            ELSE SUBSTR(l_response, 1, 500)
                                       END
          WHERE task_number = p_task_number;
+
         COMMIT;
 
     EXCEPTION
@@ -469,395 +471,6 @@ create or replace PACKAGE BODY pkg_bpm_tasks AS
     END add_attachment;
 
     -- =========================================================================
-    -- GET_PAYLOAD  --  Fetch raw XML payload for a single task  (4.0 API)
-    -- Returns the raw XML CLOB.  Parsing is done by emit_payload_fields below.
-    -- =========================================================================
-
-    FUNCTION get_payload(p_task_number IN NUMBER) RETURN CLOB IS
-        l_url      VARCHAR2(1000);
-        l_response CLOB;
-    BEGIN
-        l_url := pkg_bicc_common.gc_fa_base_url
-              || '/bpm/api/4.0/tasks/' || p_task_number || '/payload';
-
-        l_response := apex_web_service.make_rest_request(
-            p_url                  => l_url,
-            p_http_method          => 'GET',
-            p_credential_static_id => gc_credential
-        );
-
-        RETURN l_response;
-    END get_payload;
-
-
-    -- =========================================================================
-    -- EMIT_PAYLOAD_FIELDS (private)  --  Write apex_json {label,value} objects
-    -- for a task payload, keyed on task_def_name.
-    -- Called from the GET_TASK_PAYLOAD Ajax callback on page 6004.
-    -- Add a new ELSIF branch here when onboarding a new workflow type.
-    --
-    -- Supported task_def_name values:
-    --   FinApInvoiceApproval           Invoice Number, Supplier, Amount, Type, Requestor
-    --   ReqApproval                    Supplier, PO Number, Requisition, Amount, Requester, Type
-    --   FinExmWorkflowExpenseApproval /
-    --     FinExmWorkflowSpendAuth      Report Number, Employee, Amount, Submitted By
-    --   FinGlJournalApproval           Batch, Amount, Requestor, Date
-    --                                  (Oracle typo: element is "trasactionDate")
-    --   FlowManualTaskApproval         Flow, Category, Task, Owner (workflowProcess ns)
-    --   TransfersApproval / Promotions /
-    --     Assignments / Terminations /
-    --     ChangeAssignment             Employee, Module (HCM sparse, TransactionApproval ns)
-    --   DocumentApproval               Requisition Number, Approval Type, Attachments flag
-    --   TimecardApprovalELA            Employee, Period, Time Type, Submitted By
-    --   AbsencesApprovalsTask          Employee, Absence Type, Period, Duration, Submitted, Action
-    --   FinApIncompleteInvoiceHold     Invoice Number, Hold Reason
-    -- =========================================================================
-
-    PROCEDURE emit_payload_fields(p_task_number IN NUMBER) IS
-        l_task_def VARCHAR2(200);
-        l_payload  CLOB;
-        l_xml      XMLTYPE;
-
-        -- Emit a {label,value} object only when value is non-blank
-        PROCEDURE emit(p_label IN VARCHAR2, p_value IN VARCHAR2) IS
-        BEGIN
-            IF p_value IS NOT NULL AND TRIM(p_value) IS NOT NULL THEN
-                apex_json.open_object;
-                apex_json.write('label', p_label);
-                apex_json.write('value', p_value);
-                apex_json.close_object;
-            END IF;
-        END emit;
-
-    BEGIN
-        SELECT task_def_name INTO l_task_def
-          FROM bpm_workflow_tasks
-         WHERE task_number = p_task_number;
-
-        l_payload := get_payload(p_task_number);
-        l_xml     := XMLType(l_payload);
-
-        -- ------------------------------------------------------------------
-        --  AP Invoice approvals
-        --  Payload elements are direct children of <payload> in the BPM ns.
-        -- ------------------------------------------------------------------
-        IF l_task_def = 'FinApInvoiceApproval' THEN
-            FOR r IN (
-                SELECT x.invoice_num, x.supplier_name, x.invoice_amount,
-                       x.invoice_currency, x.invoice_type, x.requestor
-                  FROM XMLTABLE(
-                           XMLNAMESPACES(
-                               'http://xmlns.oracle.com/bpel/workflow/task' AS "t"
-                           ),
-                           '/t:payload'
-                           PASSING l_xml
-                           COLUMNS
-                               invoice_num      VARCHAR2(100) PATH 't:invoiceNum',
-                               supplier_name    VARCHAR2(200) PATH 't:supplierName',
-                               invoice_amount   VARCHAR2(50)  PATH 't:invoiceAmount',
-                               invoice_currency VARCHAR2(10)  PATH 't:invoiceCurrencyCode',
-                               invoice_type     VARCHAR2(50)  PATH 't:invoiceType',
-                               requestor        VARCHAR2(200) PATH 't:invoiceRequestor'
-                       ) x
-            ) LOOP
-                emit('Invoice Number', r.invoice_num);
-                emit('Supplier',       r.supplier_name);
-                emit('Amount',         r.invoice_amount
-                                       || CASE WHEN r.invoice_currency IS NOT NULL
-                                               THEN ' ' || r.invoice_currency END);
-                emit('Invoice Type',   INITCAP(r.invoice_type));
-                emit('Requestor',      r.requestor);
-            END LOOP;
-
-        -- ------------------------------------------------------------------
-        --  HCM employment change approvals (Transfer, Promotion, etc.)
-        --  Payload has service stubs; only sensorNameFromData is reliable.
-        -- ------------------------------------------------------------------
-        ELSIF l_task_def IN ('TransfersApproval', 'PromotionsApproval',
-                             'AssignmentsApproval', 'TerminationsApproval',
-                             'ChangeAssignmentApproval') THEN
-            FOR r IN (
-                SELECT x.employee_name, x.module_id
-                  FROM XMLTABLE(
-                           XMLNAMESPACES(
-                               'http://xmlns.oracle.com/bpel/workflow/task' AS "bpel",
-                               'http://xmlns.oracle.com/apps/hcm/transaction/model/entity/events/schema/TransactionApproval' AS "ta"
-                           ),
-                           '/bpel:payload/ta:TransactionApprovalRequest'
-                           PASSING l_xml
-                           COLUMNS
-                               employee_name VARCHAR2(200) PATH 'ta:sensorNameFromData',
-                               module_id     VARCHAR2(100) PATH 'ta:ModuleIdentifier'
-                       ) x
-            ) LOOP
-                emit('Employee', r.employee_name);
-                emit('Module',   r.module_id);
-            END LOOP;
-
-        -- ------------------------------------------------------------------
-        --  Purchasing / Requisition approvals  (ReqApproval)
-        --  Covers both new POs and change orders.
-        -- ------------------------------------------------------------------
-        ELSIF l_task_def = 'ReqApproval' THEN
-            FOR r IN (
-                SELECT x.supplier_name, x.doc_number, x.req_number,
-                       x.amount, x.currency_code, x.requester, x.doc_style
-                  FROM XMLTABLE(
-                           XMLNAMESPACES(
-                               'http://xmlns.oracle.com/bpel/workflow/task' AS "t"
-                           ),
-                           '/t:payload'
-                           PASSING l_xml
-                           COLUMNS
-                               supplier_name VARCHAR2(200) PATH 't:SupplierName',
-                               doc_number    VARCHAR2(50)  PATH 't:DocumentNumber',
-                               req_number    VARCHAR2(50)  PATH 't:TitleToken3',
-                               amount        VARCHAR2(50)  PATH 't:DocumentCurrencyApprovalTotal',
-                               currency_code VARCHAR2(10)  PATH 't:DocumentCurrencyCode',
-                               requester     VARCHAR2(200) PATH 't:TitleToken6',
-                               doc_style     VARCHAR2(100) PATH 't:DocumentStyleDisplayName'
-                       ) x
-            ) LOOP
-                emit('Supplier',    r.supplier_name);
-                emit('PO Number',   r.doc_number);
-                emit('Requisition', r.req_number);
-                emit('Amount',      r.amount
-                                    || CASE WHEN r.currency_code IS NOT NULL
-                                            THEN ' ' || r.currency_code END);
-                emit('Requester',   r.requester);
-                emit('Type',        r.doc_style);
-            END LOOP;
-
-        -- ------------------------------------------------------------------
-        --  Expense report approvals
-        -- ------------------------------------------------------------------
-        ELSIF l_task_def IN ('FinExmWorkflowExpenseApproval',
-                             'FinExmWorkflowSpendAuthorization') THEN
-            FOR r IN (
-                SELECT x.report_number, x.requestor, x.amount,
-                       x.currency_code, x.owner_email
-                  FROM XMLTABLE(
-                           XMLNAMESPACES(
-                               'http://xmlns.oracle.com/bpel/workflow/task' AS "t"
-                           ),
-                           '/t:payload'
-                           PASSING l_xml
-                           COLUMNS
-                               report_number VARCHAR2(100) PATH 't:expenseReportNumber',
-                               requestor     VARCHAR2(200) PATH 't:requestorDisplayname',
-                               amount        VARCHAR2(50)  PATH 't:expenseReportTotalForTitle',
-                               currency_code VARCHAR2(10)  PATH 't:currencyCode',
-                               owner_email   VARCHAR2(200) PATH 't:ownerUserName'
-                       ) x
-            ) LOOP
-                emit('Report Number', r.report_number);
-                emit('Employee',      r.requestor);
-                emit('Amount',        r.amount
-                                      || CASE WHEN r.currency_code IS NOT NULL
-                                              THEN ' ' || r.currency_code END);
-                emit('Submitted By',  r.owner_email);
-            END LOOP;
-
-        -- ------------------------------------------------------------------
-        --  GL Journal approvals
-        --  Note: Oracle typo — element is "trasactionDate" (missing n).
-        --  Amount already includes currency in the formatted string.
-        -- ------------------------------------------------------------------
-        ELSIF l_task_def = 'FinGlJournalApproval' THEN
-            FOR r IN (
-                SELECT x.batch_name, x.amount, x.requestor, x.txn_date
-                  FROM XMLTABLE(
-                           XMLNAMESPACES(
-                               'http://xmlns.oracle.com/bpel/workflow/task' AS "t"
-                           ),
-                           '/t:payload'
-                           PASSING l_xml
-                           COLUMNS
-                               batch_name VARCHAR2(200) PATH 't:batchName',
-                               amount     VARCHAR2(100) PATH 't:journalBatchAccountedAmount',
-                               requestor  VARCHAR2(200) PATH 't:requestorDisplayName',
-                               txn_date   VARCHAR2(50)  PATH 't:trasactionDate'
-                       ) x
-            ) LOOP
-                emit('Batch',     r.batch_name);
-                emit('Amount',    r.amount);
-                emit('Requestor', r.requestor);
-                -- Trim ISO timestamp to date only ("2025-12-16T01:07:17Z" → "2025-12-16")
-                emit('Date',      SUBSTR(r.txn_date, 1, 10));
-            END LOOP;
-
-        -- ------------------------------------------------------------------
-        --  HCM Process Flow manual tasks  (FlowManualTaskApproval)
-        --  Payload is in the workflowProcess namespace under <process>.
-        --  Category field contains a pipe-delimited code — use SubCategory.
-        -- ------------------------------------------------------------------
-        ELSIF l_task_def = 'FlowManualTaskApproval' THEN
-            FOR r IN (
-                SELECT x.flow_name, x.subcategory, x.checklist_name, x.owner
-                  FROM XMLTABLE(
-                           XMLNAMESPACES(
-                               'http://xmlns.oracle.com/bpel/workflow/task' AS "bpel",
-                               'http://xmlns.oracle.com/apps/hcm/processFlows/core/workflowProcess' AS "proc"
-                           ),
-                           '/bpel:payload/proc:process'
-                           PASSING l_xml
-                           COLUMNS
-                               flow_name      VARCHAR2(200) PATH 'proc:FlowInstanceName',
-                               subcategory    VARCHAR2(200) PATH 'proc:SubCategory',
-                               checklist_name VARCHAR2(200) PATH 'proc:ChecklistName',
-                               owner          VARCHAR2(200) PATH 'proc:Owner'
-                       ) x
-            ) LOOP
-                emit('Flow',     r.flow_name);
-                emit('Category', r.subcategory);
-                emit('Task',     r.checklist_name);
-                emit('Owner',    r.owner);
-            END LOOP;
-
-        -- ------------------------------------------------------------------
-        --  Document (self-service requisition) approvals
-        --  titleKey "HtTitle.ApproveRequisition0" confirms requisition type.
-        -- ------------------------------------------------------------------
-        ELSIF l_task_def = 'DocumentApproval' THEN
-            FOR r IN (
-                SELECT x.req_number, x.title_key, x.attachment_added
-                  FROM XMLTABLE(
-                           XMLNAMESPACES(
-                               'http://xmlns.oracle.com/bpel/workflow/task' AS "t"
-                           ),
-                           '/t:payload'
-                           PASSING l_xml
-                           COLUMNS
-                               req_number       VARCHAR2(100) PATH 't:requisitionNumber',
-                               title_key        VARCHAR2(200) PATH 't:titleKey',
-                               attachment_added VARCHAR2(10)  PATH 't:attachmentAdded'
-                       ) x
-            ) LOOP
-                emit('Requisition',   r.req_number);
-                emit('Approval Type', CASE r.title_key
-                                          WHEN 'HtTitle.ApproveRequisition0'  THEN 'Approve Requisition'
-                                          WHEN 'HtTitle.WithdrawRequisition0' THEN 'Withdraw Requisition'
-                                          ELSE REPLACE(REPLACE(r.title_key, 'HtTitle.', ''), '0', '')
-                                      END);
-                IF r.attachment_added = 'true' THEN
-                    emit('Attachments', 'Yes');
-                END IF;
-            END LOOP;
-
-        -- ------------------------------------------------------------------
-        --  Timecard approvals  (TimecardApprovalELA)
-        --  BPM-ns payload* elements; ConsumerCode from TimeApprovalInitiatedEvent ns.
-        --  ConsumerCode: PYR = Payroll, PRJ = Projects, ABS = Absence.
-        -- ------------------------------------------------------------------
-        ELSIF l_task_def = 'TimecardApprovalELA' THEN
-            FOR r IN (
-                SELECT x.employee_name, x.requester,
-                       x.start_date, x.stop_date, x.consumer_code
-                  FROM XMLTABLE(
-                           XMLNAMESPACES(
-                               'http://xmlns.oracle.com/bpel/workflow/task' AS "t",
-                               'http://xmlns.oracle.com/apps/hcm/time/approval/model/entity/events/schema/TimeApprovalInitiatedEvent' AS "tm"
-                           ),
-                           '/t:payload'
-                           PASSING l_xml
-                           COLUMNS
-                               employee_name VARCHAR2(200) PATH 't:payloadDisplayName',
-                               requester     VARCHAR2(200) PATH 't:payloadRequester',
-                               start_date    VARCHAR2(20)  PATH 't:payloadStartTime',
-                               stop_date     VARCHAR2(20)  PATH 't:payloadStopTime',
-                               consumer_code VARCHAR2(20)  PATH 'tm:process/tm:ConsumerCode'
-                       ) x
-            ) LOOP
-                emit('Employee',  r.employee_name);
-                emit('Period',    r.start_date
-                                  || CASE WHEN r.stop_date IS NOT NULL
-                                               AND r.stop_date != r.start_date
-                                          THEN ' to ' || r.stop_date END);
-                emit('Time Type', CASE r.consumer_code
-                                      WHEN 'PYR' THEN 'Payroll'
-                                      WHEN 'PRJ' THEN 'Projects'
-                                      WHEN 'ABS' THEN 'Absence'
-                                      ELSE r.consumer_code
-                                  END);
-                emit('Submitted By', r.requester);
-            END LOOP;
-
-        -- ------------------------------------------------------------------
-        --  Absence approvals  (AbsencesApprovalsTask)
-        --  AbsenceDispDate is pre-formatted ("12/31/2025 - 12/31/2025").
-        --  NotificationName: CREATE = New, UPDATE = Amendment, DELETE = Cancellation.
-        -- ------------------------------------------------------------------
-        ELSIF l_task_def = 'AbsencesApprovalsTask' THEN
-            FOR r IN (
-                SELECT x.person_name, x.absence_type, x.disp_date,
-                       x.duration, x.uom_name, x.submitted_date,
-                       x.notification_name
-                  FROM XMLTABLE(
-                           XMLNAMESPACES(
-                               'http://xmlns.oracle.com/bpel/workflow/task' AS "bpel",
-                               'http://xmlns.oracle.com/apps/hcm/globalAbsences/approvals/model/entity/events/schema/AbsencesApprovalsEvent' AS "ab"
-                           ),
-                           '/bpel:payload/ab:AbsencesApprovalsRequest'
-                           PASSING l_xml
-                           COLUMNS
-                               person_name       VARCHAR2(200) PATH 'ab:PersonName',
-                               absence_type      VARCHAR2(200) PATH 'ab:AbsenceType',
-                               disp_date         VARCHAR2(100) PATH 'ab:AbsenceDispDate',
-                               duration          VARCHAR2(20)  PATH 'ab:Duration',
-                               uom_name          VARCHAR2(50)  PATH 'ab:Durationuomname',
-                               submitted_date    VARCHAR2(20)  PATH 'ab:SubmittedDate',
-                               notification_name VARCHAR2(50)  PATH 'ab:NotificationName'
-                       ) x
-            ) LOOP
-                emit('Employee',     r.person_name);
-                emit('Absence Type', r.absence_type);
-                emit('Period',       r.disp_date);
-                emit('Duration',     CASE WHEN r.duration IS NOT NULL
-                                          THEN r.duration
-                                               || CASE WHEN r.uom_name IS NOT NULL
-                                                       THEN ' ' || r.uom_name END
-                                     END);
-                emit('Submitted',    r.submitted_date);
-                emit('Action',       CASE r.notification_name
-                                         WHEN 'CREATE' THEN 'New Absence'
-                                         WHEN 'UPDATE' THEN 'Amendment'
-                                         WHEN 'DELETE' THEN 'Cancellation'
-                                         ELSE r.notification_name
-                                     END);
-            END LOOP;
-
-        -- ------------------------------------------------------------------
-        --  AP Incomplete Invoice Hold  (FinApIncompleteInvoiceHold)
-        --  All elements are direct children of <payload> in the BPM namespace.
-        --  Supplier / amount are behind the findInvoiceHeader service stub.
-        -- ------------------------------------------------------------------
-        ELSIF l_task_def = 'FinApIncompleteInvoiceHold' THEN
-            FOR r IN (
-                SELECT x.invoice_num, x.hold_name, x.requestor
-                  FROM XMLTABLE(
-                           XMLNAMESPACES(
-                               'http://xmlns.oracle.com/bpel/workflow/task' AS "t"
-                           ),
-                           '/t:payload'
-                           PASSING l_xml
-                           COLUMNS
-                               invoice_num VARCHAR2(100) PATH 't:invoiceNum',
-                               hold_name   VARCHAR2(200) PATH 't:holdName',
-                               requestor   VARCHAR2(200) PATH 't:requestor'
-                       ) x
-            ) LOOP
-                emit('Invoice Number', r.invoice_num);
-                emit('Hold Reason',   INITCAP(r.hold_name));
-                emit('Requestor',     r.requestor);
-            END LOOP;
-
-        -- Add ELSIF branches here for additional task definition names.
-        END IF;
-
-    END emit_payload_fields;
-
-
-    -- =========================================================================
     -- GET_HISTORY  --  Fetch approval history for a single task  (4.0 API)
     -- Returns raw JSON CLOB for the APEX page to parse and render.
     -- =========================================================================
@@ -877,6 +490,30 @@ create or replace PACKAGE BODY pkg_bpm_tasks AS
 
         RETURN l_response;
     END get_history;
+
+
+    -- =========================================================================
+    -- GET_NOTIFICATION_CONTENT  --  Rendered BIP notification HTML (HCM REST)
+    -- Uses businessProcessNotifications endpoint with the task's GUID.
+    -- Returns the full HTML that Fusion renders in the bell icon detail panel.
+    -- =========================================================================
+
+    FUNCTION get_notification_content(p_task_id IN VARCHAR2) RETURN CLOB IS
+        l_url      VARCHAR2(1000);
+        l_response CLOB;
+    BEGIN
+        l_url := pkg_bicc_common.gc_fa_base_url
+              || '/hcmRestApi/resources/11.13.18.05/businessProcessNotifications/'
+              || p_task_id || '/enclosure/content';
+
+        l_response := apex_web_service.make_rest_request(
+            p_url                  => l_url,
+            p_http_method          => 'GET',
+            p_credential_static_id => gc_credential
+        );
+
+        RETURN l_response;
+    END get_notification_content;
 
 
     -- =========================================================================
@@ -935,6 +572,49 @@ create or replace PACKAGE BODY pkg_bpm_tasks AS
             );
         END IF;
     END create_todo_task;
+
+
+    -- =========================================================================
+    -- GET_DEEPLINK_URL  --  Redwood deep link for editing the transaction
+    -- POSTs to businessProcessNotifications/action/getDeeplinkUrlForEditAction
+    -- with the task GUID.  Returns $.result.EDIT_INFO URL, or NULL if the
+    -- task is not editable (EDIT != "true") or the call fails.
+    -- =========================================================================
+
+    FUNCTION get_deeplink_url(p_task_id IN VARCHAR2) RETURN VARCHAR2 IS
+        l_url      VARCHAR2(1000);
+        l_body     VARCHAR2(200);
+        l_response CLOB;
+        l_can_edit VARCHAR2(10);
+    BEGIN
+        l_url := pkg_bicc_common.gc_fa_base_url
+              || '/hcmRestApi/resources/11.13.18.05/businessProcessNotifications'
+              || '/action/getDeeplinkUrlForEditAction';
+
+        l_body := '{"taskId":"' || apex_escape.json(p_task_id) || '"}';
+
+        apex_web_service.g_request_headers.DELETE;
+        apex_web_service.g_request_headers(1).name  := 'Content-Type';
+        apex_web_service.g_request_headers(1).value := 'application/vnd.oracle.adf.action+json';
+        apex_web_service.g_request_headers(2).name  := 'Accept';
+        apex_web_service.g_request_headers(2).value := 'application/json';
+
+        l_response := apex_web_service.make_rest_request(
+            p_url                  => l_url,
+            p_http_method          => 'POST',
+            p_body                 => l_body,
+            p_credential_static_id => gc_user_credential  -- must be user cred: API returns EDIT:false for service accounts
+        );
+
+        l_can_edit := JSON_VALUE(l_response, '$.result.EDIT');
+
+        IF l_can_edit = 'true' THEN
+            RETURN JSON_VALUE(l_response, '$.result.EDIT_INFO');
+        END IF;
+
+        RETURN NULL;
+    END get_deeplink_url;
+
 
 END pkg_bpm_tasks;
 /

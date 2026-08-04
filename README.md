@@ -7,8 +7,7 @@ Oracle APEX application for managing Fusion BPM approval tasks via REST API. Pro
 ## Features
 
 - **Task Dashboard** -- Faceted search page (6004) displaying all pending BPM workflow tasks with status, assignee, priority, and days pending
-- **Inline Detail Panel** -- Expand/collapse panel per task row showing task payload details, comments, and attachments fetched live from the BPM API
-- **Task Payload Details** -- Amber "Details" section showing business-relevant fields parsed from the raw BPM XML payload, keyed per `task_def_name` (AP invoices, HCM changes, absences, timecards, requisitions, etc.)
+- **Inline Detail Panel** -- Expand/collapse panel per task row showing notification content, comments, and attachments. Notification content is the fully rendered BIP HTML from the HCM `businessProcessNotifications` endpoint, displayed inline via iframe for CSS isolation. Works for all task types without custom parsing.
 - **Add Comments** -- Post comments to tasks directly from the panel (Ctrl+Enter to submit)
 - **Upload Attachments** -- Upload files to tasks via multipart/mixed POST with client-side 10 MB guard
 - **Download Attachments** -- Download attachment files via streaming proxy (base64 decode in browser)
@@ -37,7 +36,6 @@ Oracle APEX application for managing Fusion BPM approval tasks via REST API. Pro
 |---|---|---|---|---|
 | GET | `/bpm/api/4.0/tasks` | 4.0 | `gc_credential` | List tasks (paginated, with `orderBy`) |
 | GET | `/bpm/api/4.0/tasks/{number}` | 4.0 | `gc_credential` | Single task detail with `actionList` |
-| GET | `/bpm/api/4.0/tasks/{number}/payload` | 4.0 | `gc_credential` | Raw XML payload (business context fields) |
 | GET | `/bpm/api/4.0/tasks/{number}/comments` | 4.0 | `gc_credential` | Fetch comments |
 | GET | `/bpm/api/4.0/tasks/{number}/attachments` | 4.0 | `gc_credential` | Fetch attachment metadata |
 | GET | `/bpm/api/4.0/tasks/{number}/attachments/{name}/stream` | 4.0 | `gc_credential` | Download attachment bytes |
@@ -47,6 +45,7 @@ Oracle APEX application for managing Fusion BPM approval tasks via REST API. Pro
 | POST | `/bpm/api/3.0/tasks/todoTask` | 3.0 | `gc_credential` | Create standalone todo task |
 | PUT | `/bpm/api/4.0/tasks/{number}` | 4.0 | `gc_user_credential` | ACQUIRE, SKIP_CURRENT_ASSIGNMENT, INFO_REQUEST |
 | PUT | `/bpm/api/3.0/tasks` | 3.0 | `gc_user_credential` | All other actions (APPROVE, REJECT, REASSIGN, ESCALATE, SUSPEND, RESUME, etc.) |
+| GET | `/hcmRestApi/resources/11.13.18.05/businessProcessNotifications/{taskId}/enclosure/contentWithoutHistory` | HCM | `gc_credential` | Rendered BIP notification HTML (transaction details without approval history) |
 
 ## Package Procedures & Functions
 
@@ -75,21 +74,8 @@ Decodes base64 CLOB to BLOB, builds multipart/mixed body, POSTs via 3.0 API.
 ### `get_history(p_task_number) RETURN CLOB`
 Returns raw JSON from the 4.0 history endpoint.
 
-### `get_payload(p_task_number) RETURN CLOB`
-Returns raw XML CLOB from the 4.0 payload endpoint (`/tasks/{number}/payload`).
-
-### `emit_payload_fields(p_task_number)`
-Parses the raw XML payload and emits `apex_json` `{label, value}` objects for business-relevant fields. Called from the `GET_TASK_PAYLOAD` Ajax callback with an `apex_json` array already open. Branches per `task_def_name` using XMLTABLE with per-namespace parsing. Covered task types:
-
-| `task_def_name` | Fields emitted |
-|---|---|
-| `FinApInvoiceApproval` | Supplier, Invoice #, Amount, Currency, Invoice Date, Description |
-| `FinApIncompleteInvoiceHold` | Hold Name, Invoice #, Requestor |
-| `TransfersApproval`, `PromotionsApproval`, `ChangeSalaryApprovalTask`, `TerminationsApproval`, `ChangeAssignmentApproval` | Worker, Action, Effective Date, Position, Department, Business Unit |
-| `RequestNewPositionApproval` | Position, Department, Business Unit, Effective Date |
-| `AbsencesApprovalsTask` | Person, Absence Type, Start Date, End Date, Duration |
-| `TimecardApprovalELA` | Consumer Code, Period Start, Period End, Total Hours |
-| `ReqStatusFYI`, `DocumentOpenFyi` | (FYI notifications -- no payload fields extracted) |
+### `get_notification_content(p_task_id) RETURN CLOB`
+Returns the fully rendered BIP notification HTML for a task. Uses the HCM REST `businessProcessNotifications` endpoint with the task's GUID (`task_id`). Uses the `contentWithoutHistory` enclosure to avoid duplicating the approval history already shown in the teal history panel. The returned HTML is the same content Fusion renders in the bell icon detail panel. Rendered inline in the detail panel via iframe with `srcdoc` for CSS isolation. Works for all task types without per-`task_def_name` branching.
 
 ### `create_todo_task(p_title, p_assignee_id, p_priority, p_start_date, p_due_date)`
 Creates a standalone todo task in the assignee's BPM inbox via the 3.0 API.
@@ -101,8 +87,8 @@ See `bpm_task_detail_apex.sql` for step-by-step instructions:
 1. Compile `pkg_bpm_tasks.sql` (spec) then `pkg_bpm_tasks.plb` (body)
 2. Upload `bpm_task_detail_js.js` and `bpm_task_detail_css.css` to Static Application Files
 3. Reference on page 6004 as `#APP_FILES#bpm_task_detail_js#MIN#.js` / `#APP_FILES#bpm_task_detail_css#MIN#.css`
-4. Add `DETAIL_TOGGLE`, `HISTORY_TOGGLE`, and `FUSION_LINK` columns to report SQL (Escape Special Characters = No). Also add `TO_CHAR(task_number) AS task_number_vc` as a hidden column and use it (not `task_number`) in the Row Search searchable columns — APEX Row Search does not match NUMBER columns via LIKE.
-5. Create seven Ajax Callback processes on page 6004: `GET_TASK_PAYLOAD`, `GET_TASK_COMMENTS`, `GET_TASK_ATTACHMENTS`, `ADD_TASK_COMMENT`, `ADD_TASK_ATTACHMENT`, `DOWNLOAD_TASK_ATTACHMENT`, `GET_TASK_HISTORY`
+4. Add `DETAIL_TOGGLE`, `HISTORY_TOGGLE`, and `FUSION_LINK` columns to report SQL (Escape Special Characters = No). The detail toggle button includes `data-task-id` so the panel can fetch notification content. Also add `TO_CHAR(task_number) AS task_number_vc` as a hidden column and use it (not `task_number`) in the Row Search searchable columns — APEX Row Search does not match NUMBER columns via LIKE.
+5. Create seven Ajax Callback processes on page 6204: `GET_NOTIFICATION_CONTENT`, `GET_TASK_COMMENTS`, `GET_TASK_ATTACHMENTS`, `ADD_TASK_COMMENT`, `ADD_TASK_ATTACHMENT`, `DOWNLOAD_TASK_ATTACHMENT`, `GET_TASK_HISTORY`
 6. Create modal page 6003 (Task Actions) with items `P6003_TASK_NUMBER`, `P6003_ACTION`, `P6003_COMMENT`, `P6003_ASSIGNEE` (hidden/shown via JS), `P6003_FROM_USER_NAME` (hidden). Ajax callbacks: `GET_TASK_ACTIONS`, `ACTION_TASK`. Add `from_user_name` as a hidden column to the page 6004 report and pass it via Link Builder as `P6003_FROM_USER_NAME` when opening the modal.
 7. Create drawer page 6104 for New Todo with `CREATE_TODO_TASK` process
 
@@ -126,7 +112,7 @@ Two APEX Web Credentials are defined as package-level constants:
 
 ### Why two credentials?
 
-**Read-only operations** (`refresh_tasks`, `get_comments`, `get_payload`, `get_history`, `get_attachments`, attachment download) use `gc_credential`. The admin account can see all tasks in the system regardless of assignee, which is exactly what the dashboard sync and detail panel reads need.
+**Read-only operations** (`refresh_tasks`, `get_comments`, `get_notification_content`, `get_history`, `get_attachments`, attachment download) use `gc_credential`. The admin account can see all tasks in the system regardless of assignee, which is exactly what the dashboard sync and detail panel reads need.
 
 **User-identity operations** must use `gc_user_credential`:
 
@@ -152,3 +138,28 @@ Tasks claimed through the BPM REST API (for example, using ACQUIRE from APEX) up
 The `bpmWorklistContext` token is encrypted and session-bound -- it cannot be reconstructed programmatically. No documented or publicly supported alternative deep-link format exists on Fusion Cloud. The on-premise SOA Worklist URL (`/integration/worklistapp/faces/detail.jspx`) returns 404 on Cloud.
 
 **Impact**: Users who claim tasks from the APEX dashboard will see "No Fusion link found" when clicking the Fusion icon for those tasks. Tasks arriving through normal Fusion workflow (the vast majority in production) will have working deep links.
+
+### REASSIGN action via REST API (under investigation)
+
+As of August 2026, the REASSIGN action does not work reliably through either BPM REST API version:
+
+- **3.0 bulk endpoint** (`PUT /bpm/api/3.0/tasks`): Returns `{}` (empty JSON) and silently ignores the reassignment. Comments included in the same request *are* posted, which makes it appear the action succeeded when it did not. This previously worked (July 2026) but stopped -- suspect a Fusion-side change.
+- **4.0 single-task endpoint** (`PUT /bpm/api/4.0/tasks/{number}`): Returns error 76012 -- "Identity service cannot get users when identities size crosses limit" -- regardless of user ID format.
+
+**User ID formats tested on 4.0** (all returned the same 76012 error):
+- Username: `jenna.fuchs`
+- Uppercase: `JENNA.FUCHS`
+- Email: `jenna.fuchs@sierra-cedar.com`
+- Display name: `Help Desk User`
+
+**4.0 JSON structure for REASSIGN** (documented but untested successfully):
+```json
+{
+  "action": {"type": "REASSIGN"},
+  "assignees": [{"id": "<user>", "type": "user"}],
+  "comment": {"commentStr": "...", "commentScope": "TASK"}
+}
+```
+Note: REASSIGN on 4.0 uses `action.type` (not `action.id`) and `assignees` inside the action payload (not top-level `identities` like INFO_REQUEST).
+
+**Current state**: Code routes REASSIGN through the 3.0 ELSE branch which silently no-ops. Needs further investigation -- may be a permissions issue with the service account, a Fusion patch regression, or a difference in required JSON structure not yet documented by Oracle.

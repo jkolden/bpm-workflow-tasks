@@ -78,19 +78,11 @@ create or replace PACKAGE pkg_bpm_tasks AS
     FUNCTION get_history(p_task_number IN NUMBER) RETURN CLOB;
 
     ---------------------------------------------------------------------------
-    -- Return raw XML payload CLOB for a single task  (4.0 API)
-    -- Parsed on the APEX side by GET_TASK_PAYLOAD callback, keyed on
-    -- task_def_name, to produce a {label, value} field list.
+    -- Return rendered BIP notification HTML for a single task.
+    -- Uses HCM REST businessProcessNotifications endpoint with the task's
+    -- GUID (task_id), not the BPM task number.
     ---------------------------------------------------------------------------
-    FUNCTION get_payload(p_task_number IN NUMBER) RETURN CLOB;
-
-    ---------------------------------------------------------------------------
-    -- Emit payload fields as apex_json objects (label/value pairs) for a task.
-    -- Called from the GET_TASK_PAYLOAD Ajax callback — caller must have already
-    -- opened an apex_json array before calling this procedure.
-    -- Branches per task_def_name; emits nothing for unknown task types.
-    ---------------------------------------------------------------------------
-    PROCEDURE emit_payload_fields(p_task_number IN NUMBER);
+    FUNCTION get_notification_content(p_task_id IN VARCHAR2) RETURN CLOB;
 
     ---------------------------------------------------------------------------
     -- Create a standalone todo task  (3.0 API)
@@ -103,6 +95,14 @@ create or replace PACKAGE pkg_bpm_tasks AS
         p_start_date  IN VARCHAR2 DEFAULT NULL,
         p_due_date    IN VARCHAR2 DEFAULT NULL
     );
+
+    ---------------------------------------------------------------------------
+    -- Return the Redwood deep link URL for editing the transaction behind a
+    -- BPM task.  Uses the HCM businessProcessNotifications action endpoint.
+    -- p_task_id : task GUID (bpm_workflow_tasks.task_id)
+    -- Returns the EDIT_INFO URL, or NULL if the task is not editable.
+    ---------------------------------------------------------------------------
+    FUNCTION get_deeplink_url(p_task_id IN VARCHAR2) RETURN VARCHAR2;
 
 END pkg_bpm_tasks;
 /

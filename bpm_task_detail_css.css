@@ -71,42 +71,45 @@
 }
 
 /* Section title accent colours — keyed by modifier class */
-.btask-section-title--details     { color: #d97706; }   /* amber  — payload details */
 .btask-section-title--comments    { color: var(--ut-palette-primary, #0572CE); }  /* blue */
 .btask-section-title--attachments { color: #0d9488; }   /* teal   — attachments */
 
-/* --- Detail fields (payload) --- */
-.btask-detail-fields {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px 16px;
+/* --- Notification panel (standalone, like history) --- */
+.btask-notif-row > td {
+    padding: 4px 8px !important;
+    background: transparent !important;
+    border: none !important;
 }
 
-.btask-detail-field {
-    display: flex;
-    flex-direction: column;
-    background: linear-gradient(135deg, #fffbeb 0%, #fff 100%);
-    border: 1px solid #fde68a;
-    border-left: 3px solid #d97706;
-    border-radius: 0 6px 6px 0;
-    padding: 5px 10px;
-    min-width: 140px;
+.btask-notif-panel {
+    padding: 0;
+    background: var(--ut-component-background-color, #fff);
+    border: 2px solid #B35B2D;
+    border-radius: 8px;
+    max-width: 700px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+    overflow: hidden;
 }
 
-.btask-field-label {
-    font-size: 10px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: #92400e;
-    margin-bottom: 2px;
+.btask-header-notif {
+    background: #B35B2D;
 }
 
-.btask-field-value {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--ut-component-text-default-color, #1f2937);
-    word-break: break-word;
+.btask-notif-close {
+    color: rgba(255, 255, 255, 0.8) !important;
+}
+
+.btask-notif-close:hover {
+    color: #fff !important;
+}
+
+/* --- Inline notification content (iframe) --- */
+.btask-notif-inline {
+    width: 100%;
+    min-height: 150px;
+    border: none;
+    display: block;
+    overflow: hidden;
 }
 
 /* --- Add-comment form --- */
@@ -358,6 +361,21 @@ a.btask-attach-name:hover {
     transform: rotate(360deg);
 }
 
+.btask-notif-toggle {
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 4px 8px;
+    font-size: 16px;
+    color: #B35B2D;
+    transition: transform 0.15s, color 0.15s;
+}
+
+.btask-notif-toggle:hover {
+    color: #8A4520;
+    transform: scale(1.15);
+}
+
 /* --- Last Action badge --- */
 .btask-la {
     display: inline-block;
@@ -472,6 +490,7 @@ a.btask-attach-name:hover {
 
 .btask-cell__actions .btask-toggle,
 .btask-cell__actions .btask-history-toggle,
+.btask-cell__actions .btask-notif-toggle,
 .btask-cell__actions .bpm-fusion-link {
     display: inline-flex;
     align-items: center;
@@ -491,12 +510,14 @@ a.btask-attach-name:hover {
 
 .btask-cell__actions .btask-toggle:hover,
 .btask-cell__actions .btask-history-toggle:hover,
+.btask-cell__actions .btask-notif-toggle:hover,
 .btask-cell__actions .bpm-fusion-link:hover {
     transform: translateY(-1px);
 }
 
 .btask-cell__actions .btask-toggle:focus-visible,
 .btask-cell__actions .btask-history-toggle:focus-visible,
+.btask-cell__actions .btask-notif-toggle:focus-visible,
 .btask-cell__actions .bpm-fusion-link:focus-visible,
 .btask-action-link:focus-visible {
     outline: 2px solid var(--ut-palette-primary, #0572ce);
@@ -523,6 +544,16 @@ a.btask-attach-name:hover {
     background: rgba(109, 63, 73, .16);
 }
 
+/* Notification */
+.btask-cell__actions .btask-notif-toggle {
+    color: #B35B2D;
+    background: rgba(179, 91, 45, .08);
+}
+
+.btask-cell__actions .btask-notif-toggle:hover {
+    background: rgba(179, 91, 45, .16);
+}
+
 /* Fusion */
 .btask-cell__actions .bpm-fusion-link {
     color: var(--ut-link-text-color, #0066cc);
@@ -532,7 +563,6 @@ a.btask-attach-name:hover {
 .btask-cell__actions .bpm-fusion-link:hover {
     background: rgba(0, 102, 204, .16);
 }
-
 
 /*==============================================================
   ROW ACTION BUTTON

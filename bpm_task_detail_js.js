@@ -2,16 +2,20 @@
  * BPM Task Detail — Inline Expand/Collapse
  * ------------------------------------------
  * Combined comments + attachments panel for the Task List Faceted page.
- * Comments and attachments are fetched from / posted to the BPM 3.0 REST API.
+ * Notification content is a separate toggle column that renders BIP HTML
+ * from the HCM businessProcessNotifications endpoint in an iframe.
+ * Comments and attachments use the BPM REST API.
  * Uses "btask-" prefix to avoid collisions.
  *
  * APEX setup:
  *   - Upload to Shared Components > Static Application Files.
  *   - Reference on page 6004 as: #APP_FILES#bpm_task_detail_js#MIN#.js
- *   - Requires six Ajax callbacks: GET_TASK_PAYLOAD, GET_TASK_COMMENTS,
- *     GET_TASK_ATTACHMENTS, ADD_TASK_COMMENT, ADD_TASK_ATTACHMENT,
- *     DOWNLOAD_TASK_ATTACHMENT (see bpm_task_detail_apex.sql).
- *   - Report needs an HTML Expression column for the toggle button.
+ *   - Requires six Ajax callbacks: GET_NOTIFICATION_CONTENT,
+ *     GET_TASK_COMMENTS, GET_TASK_ATTACHMENTS, ADD_TASK_COMMENT,
+ *     ADD_TASK_ATTACHMENT, DOWNLOAD_TASK_ATTACHMENT
+ *     (see bpm_task_detail_apex.sql).
+ *   - Report needs HTML Expression columns for detail, history, and
+ *     notification toggle buttons.
  */
 (function () {
     "use strict";
@@ -26,6 +30,7 @@
         var $btn      = $(this),
             taskNum   = $btn.data("task-number"),
             taskState = $btn.data("task-state") || "",
+            taskId    = $btn.data("task-id")    || "",  // GUID for deeplink
             $tr       = $btn.closest("tr"),
             $exist    = $tr.next(".btask-detail-row");
 
@@ -61,22 +66,15 @@
         $tr.after($detailRow);
         $detailRow.hide().slideDown(200);
 
-        fetchData(taskNum, taskState, $detailRow.find(".btask-panel"));
+        fetchData(taskNum, taskState, taskId, $detailRow.find(".btask-panel"));
     });
 
     /* ================================================================== */
-    /*  Fetch payload, comments, and attachments in parallel              */
+    /*  Fetch comments and attachments in parallel                       */
     /* ================================================================== */
-    function fetchData(taskNum, taskState, $panel) {
-        var dPayload  = $.Deferred(),
-            dComments = $.Deferred(),
-            dAttach   = $.Deferred();
-
-        apex.server.process("GET_TASK_PAYLOAD", { x01: String(taskNum) }, {
-            dataType: "json",
-            success: function (data) { dPayload.resolve(data); },
-            error:   function ()     { dPayload.resolve({ status: "ERROR", fields: [] }); }
-        });
+    function fetchData(taskNum, taskState, taskId, $panel) {
+        var dComments  = $.Deferred(),
+            dAttach    = $.Deferred();
 
         apex.server.process("GET_TASK_COMMENTS", { x01: String(taskNum) }, {
             dataType: "json",
@@ -90,8 +88,11 @@
             error:   function ()     { dAttach.resolve({ status: "ERROR" }); }
         });
 
-        $.when(dPayload, dComments, dAttach).done(function (pData, cData, aData) {
-            render(taskNum, taskState, pData, cData, aData, $panel);
+        // Store taskId on panel so add-comment/attach re-fetch calls can retrieve it
+        if (taskId) { $panel.data("task-id", taskId); }
+
+        $.when(dComments, dAttach).done(function (cData, aData) {
+            render(taskNum, taskState, cData, aData, $panel);
         });
     }
 
@@ -101,7 +102,7 @@
     // States where the BPM API rejects new comments and attachments
     var TERMINAL_STATES = { COMPLETED: 1, WITHDRAWN: 1, EXPIRED: 1, ERRORED: 1, SUSPENDED: 1 };
 
-    function render(taskNum, taskState, payloadData, commentsData, attachData, $panel) {
+    function render(taskNum, taskState, commentsData, attachData, $panel) {
         var h = "";
         var canAdd = !TERMINAL_STATES[taskState.toUpperCase()];
 
@@ -114,24 +115,6 @@
 
         // --- Body wrapper ---
         h += '<div class="btask-body">';
-
-        // ============================================================
-        //  DETAILS section  (payload fields — shown only when present)
-        // ============================================================
-        var fields = (payloadData && payloadData.fields) ? payloadData.fields : [];
-        if (fields.length) {
-            h += '<div class="btask-section">';
-            h += '<div class="btask-section-title btask-section-title--details">Details</div>';
-            h += '<div class="btask-detail-fields">';
-            for (var k = 0; k < fields.length; k++) {
-                var f = fields[k];
-                h += '<div class="btask-detail-field">' +
-                     '<span class="btask-field-label">' + escHtml(f.label) + '</span>' +
-                     '<span class="btask-field-value">' + escHtml(f.value) + '</span>' +
-                     '</div>';
-            }
-            h += '</div></div>';
-        }
 
         // ============================================================
         //  COMMENTS section
@@ -242,7 +225,7 @@
                 dataType: "json",
                 success: function (data) {
                     if (data.status === "OK") {
-                        fetchData(taskNum, $panel.data("task-state") || "", $panel);
+                        fetchData(taskNum, $panel.data("task-state") || "", $panel.data("task-id") || "", $panel);
                     } else {
                         showError(data.message || "Error adding comment.");
                         resetBtn($btn, "fa-plus");
@@ -312,7 +295,7 @@
                 dataType: "json",
                 success: function (data) {
                     if (data.status === "OK") {
-                        fetchData(taskNum, $panel.data("task-state") || "", $panel);
+                        fetchData(taskNum, $panel.data("task-state") || "", $panel.data("task-id") || "", $panel);
                     } else {
                         showError(data.message || "Error uploading attachment.");
                         resetBtn($btn, "fa-upload");
@@ -515,6 +498,130 @@
     });
 
     /* ================================================================== */
+    /*  Notification toggle — separate column                              */
+    /* ================================================================== */
+    $(document).on("click", ".btask-notif-toggle", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        var $btn   = $(this),
+            taskId = $btn.data("task-id"),
+            $tr    = $btn.closest("tr"),
+            $exist = $tr.next(".btask-notif-row");
+
+        if (!taskId) return;
+
+        // Collapse if already open
+        if ($exist.length) {
+            collapseNotif($exist, $btn);
+            return;
+        }
+
+        // Close any other open notification panel
+        $(".btask-notif-row").each(function () {
+            var $prev = $(this).prev("tr").find(".btask-notif-toggle");
+            collapseNotif($(this), $prev);
+        });
+
+        $btn.addClass("is-open")
+            .find(".fa-file-text-o")
+            .removeClass("fa-file-text-o")
+            .addClass("fa-file-text");
+
+        var colSpan  = $tr.children("td").length,
+            $notifRow = $(
+                '<tr class="btask-notif-row">' +
+                '<td colspan="' + colSpan + '" class="btask-detail-td">' +
+                '<div class="btask-notif-panel">' +
+                '<div class="btask-loading">' +
+                '<span class="fa fa-refresh fa-anim-spin"></span> Loading&hellip;' +
+                '</div></div></td></tr>'
+            );
+
+        $tr.after($notifRow);
+        $notifRow.hide().slideDown(200);
+
+        fetchNotifContent(taskId, $notifRow.find(".btask-notif-panel"));
+    });
+
+    function fetchNotifContent(taskId, $panel) {
+        var dNotif    = $.Deferred(),
+            dDeeplink = $.Deferred();
+
+        apex.server.process("GET_NOTIFICATION_CONTENT", { x01: taskId }, {
+            dataType: "json",
+            success: function (data) { dNotif.resolve(data); },
+            error:   function ()     { dNotif.resolve({ status: "ERROR" }); }
+        });
+
+        apex.server.process("GET_EDIT_DEEPLINK", { x01: taskId }, {
+            dataType: "json",
+            success: function (data) { dDeeplink.resolve(data.url || ""); },
+            error:   function ()     { dDeeplink.resolve(""); }
+        });
+
+        $.when(dNotif, dDeeplink).done(function (data, fusionUrl) {
+            renderNotifContent(data, fusionUrl, $panel);
+        });
+    }
+
+    function renderNotifContent(data, fusionUrl, $panel) {
+        var h = '';
+
+        h += '<div class="btask-header btask-header-notif">' +
+             '<span class="btask-title">Notification</span>';
+
+        if (fusionUrl) {
+            h += '<a href="' + escHtml(fusionUrl) + '" target="_blank" ' +
+                 'class="btask-fusion-tx-link t-Button t-Button--tiny t-Button--hot" ' +
+                 'title="Open transaction in Fusion Redwood">' +
+                 '<span class="fa fa-external-link"></span> Open Transaction in Fusion</a>';
+        }
+
+        h += '<button type="button" class="btask-notif-close t-Button t-Button--icon ' +
+             't-Button--tiny t-Button--noUI" aria-label="Close panel">' +
+             '<span class="fa fa-times"></span></button></div>';
+
+        h += '<div class="btask-body">';
+
+        if (data && data.status === "OK" && data.html) {
+            h += '<iframe class="btask-notif-inline" sandbox="allow-same-origin"></iframe>';
+        } else if (data.status === "ERROR") {
+            h += '<div class="btask-error">Error loading notification content.</div>';
+        } else {
+            h += '<div class="btask-empty">No notification content available.</div>';
+        }
+
+        h += '</div>';
+
+        $panel.html(h);
+
+        // Load BIP HTML into iframe via srcdoc (CSS isolation)
+        if (data && data.status === "OK" && data.html) {
+            var $iframe = $panel.find(".btask-notif-inline");
+            $iframe.attr("srcdoc", data.html);
+            $iframe.on("load", function () {
+                try {
+                    var doc = this.contentDocument || this.contentWindow.document;
+                    var ch = doc.documentElement.scrollHeight || doc.body.scrollHeight;
+                    $iframe.css("height", (ch + 20) + "px");
+                } catch (ex) {
+                    $iframe.css("height", "auto");
+                }
+            });
+        }
+    }
+
+    /* ================================================================== */
+    /*  Notification close button                                          */
+    /* ================================================================== */
+    $(document).on("click", ".btask-notif-close", function () {
+        var $notifRow = $(this).closest(".btask-notif-row"),
+            $btn      = $notifRow.prev("tr").find(".btask-notif-toggle");
+        collapseNotif($notifRow, $btn);
+    });
+
+    /* ================================================================== */
     /*  Close button                                                       */
     /* ================================================================== */
     $(document).on("click", ".btask-close", function () {
@@ -529,6 +636,7 @@
     $(document).on("apexafterrefresh", function () {
         $(".btask-detail-row").remove();
         $(".btask-history-row").remove();
+        $(".btask-notif-row").remove();
         $(".btask-toggle").removeClass("is-open")
             .find(".fa-folder-open")
             .removeClass("fa-folder-open")
@@ -537,6 +645,10 @@
             .find(".fa-calendar-clock")
             .removeClass("fa-calendar-clock")
             .addClass("fa-clock-o");
+        $(".btask-notif-toggle").removeClass("is-open")
+            .find(".fa-file-text")
+            .removeClass("fa-file-text")
+            .addClass("fa-file-text-o");
     });
 
     /* ================================================================== */
@@ -559,6 +671,16 @@
                 .find(".fa-calendar-clock")
                 .removeClass("fa-calendar-clock")
                 .addClass("fa-clock-o");
+        }
+    }
+
+    function collapseNotif($notifRow, $btn) {
+        $notifRow.slideUp(150, function () { $notifRow.remove(); });
+        if ($btn && $btn.length) {
+            $btn.removeClass("is-open")
+                .find(".fa-file-text")
+                .removeClass("fa-file-text")
+                .addClass("fa-file-text-o");
         }
     }
 
