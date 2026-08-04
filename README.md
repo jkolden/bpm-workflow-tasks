@@ -45,7 +45,7 @@ Oracle APEX application for managing Fusion BPM approval tasks via REST API. Pro
 | POST | `/bpm/api/3.0/tasks/todoTask` | 3.0 | `gc_credential` | Create standalone todo task |
 | PUT | `/bpm/api/4.0/tasks/{number}` | 4.0 | `gc_user_credential` | ACQUIRE, SKIP_CURRENT_ASSIGNMENT, INFO_REQUEST |
 | PUT | `/bpm/api/3.0/tasks` | 3.0 | `gc_user_credential` | All other actions (APPROVE, REJECT, REASSIGN, ESCALATE, SUSPEND, RESUME, etc.) |
-| GET | `/hcmRestApi/resources/11.13.18.05/businessProcessNotifications/{taskId}/enclosure/contentWithoutHistory` | HCM | `gc_credential` | Rendered BIP notification HTML (transaction details without approval history) |
+| GET | `/hcmRestApi/resources/11.13.18.05/businessProcessNotifications/{taskId}/enclosure/content` | HCM | `gc_credential` | Rendered BIP notification HTML (full transaction notification content) |
 | POST | `/hcmRestApi/resources/11.13.18.05/businessProcessNotifications/action/getDeeplinkUrlForEditAction` | HCM | `gc_user_credential` | Redwood transaction deeplink URL for the task (`{"taskId":"<guid>"}` → `{"result":{"EDIT":"true","EDIT_INFO":"<url>"}}`). Returns `EDIT: false` when called with a service account; must use logged-in user credential. |
 
 ## Package Procedures & Functions
@@ -76,7 +76,7 @@ Decodes base64 CLOB to BLOB, builds multipart/mixed body, POSTs via 3.0 API.
 Returns raw JSON from the 4.0 history endpoint.
 
 ### `get_notification_content(p_task_id) RETURN CLOB`
-Returns the fully rendered BIP notification HTML for a task. Uses the HCM REST `businessProcessNotifications` endpoint with the task's GUID (`task_id`). Uses the `contentWithoutHistory` enclosure to avoid duplicating the approval history already shown in the teal history panel. The returned HTML is the same content Fusion renders in the bell icon detail panel. Rendered inline in the detail panel via iframe with `srcdoc` for CSS isolation. Works for all task types without per-`task_def_name` branching.
+Returns the fully rendered BIP notification HTML for a task. Uses the HCM REST `businessProcessNotifications/{taskId}/enclosure/content` endpoint with the task's GUID. The returned HTML is the same content Fusion renders in the bell icon detail panel. Rendered inline in the detail panel via iframe with `srcdoc` for CSS isolation. Works for all task types without per-`task_def_name` branching.
 
 ### `get_deeplink_url(p_task_id) RETURN VARCHAR2`
 Returns the Redwood deep link URL for directly editing the transaction behind a BPM task. POSTs to the HCM `businessProcessNotifications/action/getDeeplinkUrlForEditAction` endpoint with the task's GUID. Returns `NULL` if the task is not editable or if the calling user does not have edit rights. Must use `gc_user_credential` — the API returns `EDIT: false` for service accounts because it checks whether the *calling user* can edit the specific transaction.
