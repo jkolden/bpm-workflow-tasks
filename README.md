@@ -46,6 +46,7 @@ Oracle APEX application for managing Fusion BPM approval tasks via REST API. Pro
 | PUT | `/bpm/api/4.0/tasks/{number}` | 4.0 | `gc_user_credential` | ACQUIRE, SKIP_CURRENT_ASSIGNMENT, INFO_REQUEST |
 | PUT | `/bpm/api/3.0/tasks` | 3.0 | `gc_user_credential` | All other actions (APPROVE, REJECT, REASSIGN, ESCALATE, SUSPEND, RESUME, etc.) |
 | GET | `/hcmRestApi/resources/11.13.18.05/businessProcessNotifications/{taskId}/enclosure/contentWithoutHistory` | HCM | `gc_credential` | Rendered BIP notification HTML (transaction details without approval history) |
+| POST | `/hcmRestApi/resources/11.13.18.05/businessProcessNotifications/action/getDeeplinkUrlForEditAction` | HCM | `gc_user_credential` | Redwood transaction deeplink URL for the task (`{"taskId":"<guid>"}` → `{"result":{"EDIT":"true","EDIT_INFO":"<url>"}}`). Returns `EDIT: false` when called with a service account; must use logged-in user credential. |
 
 ## Package Procedures & Functions
 
@@ -77,6 +78,9 @@ Returns raw JSON from the 4.0 history endpoint.
 ### `get_notification_content(p_task_id) RETURN CLOB`
 Returns the fully rendered BIP notification HTML for a task. Uses the HCM REST `businessProcessNotifications` endpoint with the task's GUID (`task_id`). Uses the `contentWithoutHistory` enclosure to avoid duplicating the approval history already shown in the teal history panel. The returned HTML is the same content Fusion renders in the bell icon detail panel. Rendered inline in the detail panel via iframe with `srcdoc` for CSS isolation. Works for all task types without per-`task_def_name` branching.
 
+### `get_deeplink_url(p_task_id) RETURN VARCHAR2`
+Returns the Redwood deep link URL for directly editing the transaction behind a BPM task. POSTs to the HCM `businessProcessNotifications/action/getDeeplinkUrlForEditAction` endpoint with the task's GUID. Returns `NULL` if the task is not editable or if the calling user does not have edit rights. Must use `gc_user_credential` — the API returns `EDIT: false` for service accounts because it checks whether the *calling user* can edit the specific transaction.
+
 ### `create_todo_task(p_title, p_assignee_id, p_priority, p_start_date, p_due_date)`
 Creates a standalone todo task in the assignee's BPM inbox via the 3.0 API.
 
@@ -88,7 +92,7 @@ See `bpm_task_detail_apex.sql` for step-by-step instructions:
 2. Upload `bpm_task_detail_js.js` and `bpm_task_detail_css.css` to Static Application Files
 3. Reference on page 6004 as `#APP_FILES#bpm_task_detail_js#MIN#.js` / `#APP_FILES#bpm_task_detail_css#MIN#.css`
 4. Add `DETAIL_TOGGLE`, `HISTORY_TOGGLE`, and `FUSION_LINK` columns to report SQL (Escape Special Characters = No). The detail toggle button includes `data-task-id` so the panel can fetch notification content. Also add `TO_CHAR(task_number) AS task_number_vc` as a hidden column and use it (not `task_number`) in the Row Search searchable columns — APEX Row Search does not match NUMBER columns via LIKE.
-5. Create seven Ajax Callback processes on page 6204: `GET_NOTIFICATION_CONTENT`, `GET_TASK_COMMENTS`, `GET_TASK_ATTACHMENTS`, `ADD_TASK_COMMENT`, `ADD_TASK_ATTACHMENT`, `DOWNLOAD_TASK_ATTACHMENT`, `GET_TASK_HISTORY`
+5. Create eight Ajax Callback processes on page 6204: `GET_NOTIFICATION_CONTENT`, `GET_EDIT_DEEPLINK`, `GET_TASK_COMMENTS`, `GET_TASK_ATTACHMENTS`, `ADD_TASK_COMMENT`, `ADD_TASK_ATTACHMENT`, `DOWNLOAD_TASK_ATTACHMENT`, `GET_TASK_HISTORY`
 6. Create modal page 6003 (Task Actions) with items `P6003_TASK_NUMBER`, `P6003_ACTION`, `P6003_COMMENT`, `P6003_ASSIGNEE` (hidden/shown via JS), `P6003_FROM_USER_NAME` (hidden). Ajax callbacks: `GET_TASK_ACTIONS`, `ACTION_TASK`. Add `from_user_name` as a hidden column to the page 6004 report and pass it via Link Builder as `P6003_FROM_USER_NAME` when opening the modal.
 7. Create drawer page 6104 for New Todo with `CREATE_TODO_TASK` process
 
@@ -118,6 +122,7 @@ Two APEX Web Credentials are defined as package-level constants:
 
 - **`GET_TASK_ACTIONS`** — the BPM `actionList` is user-specific. The 4.0 API returns only the actions the *authenticated caller* is permitted to take on that task. Calling with the admin credential returns the admin's action list, not the current user's.
 - **`action_task` (PUT)** — BPM records the authenticated caller as the approver in its audit trail, not a field in the request body. Using the admin credential would show `gcs_reports` as the approver in every BPM workflow history.
+- **`get_deeplink_url`** — `getDeeplinkUrlForEditAction` checks whether the *calling user* has edit rights to the underlying transaction. Service accounts are not transaction participants, so they always receive `EDIT: false` and no URL is returned.
 
 ### How user credentials work in APEX
 
