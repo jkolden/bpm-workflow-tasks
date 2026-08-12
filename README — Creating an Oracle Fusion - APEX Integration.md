@@ -9,6 +9,52 @@ ORA-18714: Login timeout specified by DataSource.setLoginTimeout(int)
 or by the oracle.jdbc.loginTimeout property has expired.
 ```
 
+## Quick Click Sheet — TL;DR
+
+Use this checklist when creating a new APEX/Fusion integration. The detailed sections below explain each step and provide troubleshooting guidance.
+
+| Step | Go Here | Do This |
+|---|---|---|
+| **1. Database** | OCI → Autonomous AI Database | Identify the APEX database and compartment. |
+| **2. Vault** | Identity & Security → Key Management → Vault | Select an existing Vault **or create one**. |
+| **3. Master Key** | Vault → Master encryption keys | Select/create a key using **HSM → AES → 256-bit**. |
+| **4. DB Connection** | Developer Services → Database Tools → Connections → Create connection | Select **Oracle Autonomous AI Database** and the target database. |
+| **5. Username** | Create Connection | Enter **ADMIN**. |
+| **6. Password Secret** | Create Connection → Create password secret | Select the Vault + key and enter the target database's **ADMIN password**. If a valid secret already exists, select it instead. |
+| **7. Wallet** | Create Connection → SSL details | Select **Oracle auto-login wallet**. |
+| **8. Wallet Secret** | SSL details → Create wallet content secret | Choose **Retrieve regional wallet from Autonomous AI Database** and select the Vault + key. |
+| **9. Create** | Create Connection | Create the connection and wait for **Active**. |
+| **10. TEST IT** | Connection → SQL worksheet | Run `SELECT SYSDATE, USER FROM DUAL;` — it must execute successfully and return **ADMIN**. |
+| **11. Fusion** | Connection → Actions → Integrate APEX with Fusion Applications | Select the desired Fusion environment and click **Integrate**. |
+| **12. Verify in OCI** | Connection → Credentials | Look for `APEX$FA_<FUSION-ENV>_CRED` in **Enabled** state. |
+| **13. Verify in APEX** | APEX → Create App → Create Fusion Integration | Confirm the Fusion environment appears in the **Fusion Instance Name** dropdown. |
+
+> **STOP at Step 10 if SQL Worksheet does not work.** Do not troubleshoot the Fusion integration until the Database Tools connection can successfully execute SQL as `ADMIN`.
+
+> **Existing resources may be reused.** You do not need to create a new Vault, encryption key, or password secret if appropriate working resources already exist and IAM permits access. When troubleshooting, do not modify, rotate, replace, or delete existing resources that may already be in use.
+
+### What Success Looks Like
+
+```text
+Autonomous Database available
+        ↓
+Password secret valid
+        ↓
+SSO wallet secret valid
+        ↓
+Database Tools connection Active
+        ↓
+SQL Worksheet returns ADMIN
+        ↓
+Integrate APEX with Fusion Applications
+        ↓
+APEX$FA_<FUSION-ENV>_CRED is Enabled
+        ↓
+Fusion environment appears in APEX
+```
+
+---
+
 ## Overview
 
 The integration path is:
