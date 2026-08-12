@@ -203,15 +203,24 @@ Wait for the Vault to become **Active**.
 
 #### Create a Dedicated Encryption Key
 
-Open the new Vault and create a Master Encryption Key.
+Open the new Vault and create a **Master Encryption Key**.
 
-For example:
+Use the following settings:
 
 ```text
-GCS_OIC_Key
+Name: GCS_OIC_Key
+Protection Mode: HSM
+Key Shape / Algorithm: AES
+Key Length: 256 bits
 ```
 
-Wait for the key to become **Enabled**.
+**HSM** is the OCI default protection mode and is appropriate for the key used to encrypt the Database Tools password and wallet secrets. With HSM protection, the key material remains in the hardware security module and cryptographic operations are performed there.
+
+The protection mode cannot be changed after the key is created, so select **HSM** when creating the key.
+
+For the key shape, use a symmetric **AES 256-bit** key.
+
+Wait for the key to become **Enabled** before creating the password or wallet secrets.
 
 #### Create a Dedicated Database Password Secret
 
