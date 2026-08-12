@@ -83,29 +83,262 @@ port=1522
 
 ---
 
-## 3. Create or Verify the Database Password Secret
+## 3. Create the Database Password Secret
 
-OCI Database Tools stores the database password in OCI Vault.
+OCI Database Tools does not store the database password directly in the connection. The password must first be stored as a secret in OCI Vault.
+
+You will need the password for the database user that Database Tools will use to connect to the target Autonomous Database. In our configuration, this is the `ADMIN` database user.
+
+When creating the Database Tools connection, enter:
+
+```text
+Username: ADMIN
+```
+
+Then click:
+
+```text
+Create password secret
+```
+
+Create a new secret containing the `ADMIN` password for the target Autonomous Database.
+
+For example:
+
+```text
+Name: <DATABASE_NAME>_ADMIN_PASSWORD
+Description: ADMIN database password for <DATABASE_NAME> Database Tools connection
+Vault: Test_vault
+Encryption key: Test_Key
+User password: <ADMIN password for the target database>
+Confirm user password: <same password>
+```
+
+The Vault and encryption key do **not** need to reside in the same compartment as the target Autonomous Database. An existing Vault and encryption key in another compartment can be used, provided the appropriate OCI IAM permissions allow access.
+
+For the Greenville environment, the existing resources are:
+
+```text
+Vault: Test_vault
+Encryption key: Test_Key
+Compartment: gcsd (root)
+```
+
+After the secret is created, select it as the **User password secret** on the Database Tools connection.
+
+If a password secret already exists for the target database and its credentials are known to be current, it can be reused instead of creating a new one.
+
+### Verify the Credential
+
+Before proceeding, verify that the database credential is valid if possible.
+
+For example, log into Database Actions using:
+
+```text
+Username: ADMIN
+Password: <password stored in the secret>
+```
+
+A simple database test is:
+
+```sql
+SELECT SYSDATE, USER
+FROM DUAL;
+```
+
+The expected user is:
+
+```text
+ADMIN
+```
+
+If Database Actions is unavailable or fails to load, credential validation can also be performed later through the SQL Worksheet associated with the Database Tools connection.
+
+> **Security:** Do not expose database passwords or decoded secret values in screenshots, documentation, Teams/Slack, email, or Git.
+
+---
+
+### Option: Create Dedicated Vault Resources in the Database Compartment
+
+The existing Vault and encryption key can be reused across compartments when IAM permissions allow it. However, a team may prefer to keep all Database Tools resources associated with a database in the same compartment.
+
+For example, for `GCSATPDEV` in the `gcsd_OIC` compartment, either of the following approaches is valid:
+
+```text
+Option A — Reuse existing resources
+Vault: Test_vault
+Encryption key: Test_Key
+Compartment: gcsd (root)
+
+Option B — Create dedicated resources
+Vault: GCS_OIC_Vault
+Encryption key: GCS_OIC_Key
+Compartment: gcsd_OIC
+```
+
+Option B provides cleaner ownership and resource organization for teams that manage their own OCI compartment.
+
+#### Create a Dedicated Vault
 
 Navigate to:
 
 ```text
 Identity & Security
-→ Secrets Management
+→ Vault
 ```
 
-The secret must contain the password for the database user used by Database Tools.
-
-For the Greenville APEX database:
+Select:
 
 ```text
-Database user: ADMIN
-Password secret: DemoSecret
+Compartment: gcsd_OIC
 ```
 
-If necessary, verify the secret by retrieving its decoded value and logging into Database Actions as `ADMIN`.
+Click **Create Vault** and use a descriptive name, for example:
 
-Do not expose the decoded password in screenshots, documentation, Slack, email, or Git.
+```text
+GCS_OIC_Vault
+```
+
+Wait for the Vault to become **Active**.
+
+#### Create a Dedicated Encryption Key
+
+Open the new Vault and create a Master Encryption Key.
+
+For example:
+
+```text
+GCS_OIC_Key
+```
+
+Wait for the key to become **Enabled**.
+
+#### Create a Dedicated Database Password Secret
+
+When creating the Database Tools connection, enter:
+
+```text
+Database: GCSATPDEV
+Username: ADMIN
+```
+
+Click:
+
+```text
+Create password secret
+```
+
+Create the secret using the dedicated Vault and key:
+
+```text
+Name: GCSATPDEV_ADMIN_PASSWORD
+
+Description:
+ADMIN database password for GCSATPDEV Database Tools connection
+
+Vault:
+GCS_OIC_Vault
+
+Encryption key:
+GCS_OIC_Key
+
+User password:
+<ADMIN password for GCSATPDEV>
+
+Confirm user password:
+<same password>
+```
+
+After creation, select:
+
+```text
+User password secret:
+GCSATPDEV_ADMIN_PASSWORD
+```
+
+#### Create a Dedicated Wallet Secret
+
+Continue to the **SSL details** section of the Database Tools connection.
+
+Select:
+
+```text
+Wallet format:
+Oracle auto-login wallet (e.g. cwallet.sso)
+```
+
+Click:
+
+```text
+Create wallet content secret
+```
+
+Choose:
+
+```text
+Retrieve regional wallet from Autonomous AI Database
+```
+
+Create the wallet secret using the dedicated Vault and key:
+
+```text
+Name:
+GCSATPDEV_WALLET
+
+Description:
+Autonomous Database wallet for GCSATPDEV Database Tools connection
+
+Vault:
+GCS_OIC_Vault
+
+Encryption key:
+GCS_OIC_Key
+
+Database:
+GCSATPDEV
+```
+
+Database Tools will retrieve the Autonomous Database wallet and create the secret with the required:
+
+```text
+contentType = SSO_WALLET
+```
+
+Do **not** create a generic Plain-Text Vault secret containing Base64 wallet contents.
+
+#### Resulting Dedicated Configuration
+
+The completed Database Tools connection would use resources similar to:
+
+```text
+Connection name:
+GCSATPDEV_Fusion
+
+Compartment:
+gcsd_OIC
+
+Database:
+GCSATPDEV
+
+Username:
+ADMIN
+
+Password secret:
+GCSATPDEV_ADMIN_PASSWORD
+
+Vault:
+GCS_OIC_Vault
+
+Encryption key:
+GCS_OIC_Key
+
+Wallet secret:
+GCSATPDEV_WALLET
+```
+
+This configuration is functionally equivalent to using shared Vault resources. The difference is organizational: the Vault, key, password secret, wallet secret, database, and Database Tools connection can all be managed within the team's `gcsd_OIC` compartment.
+
+Creating these dedicated resources does **not** require modifying or deleting any existing Vaults, keys, secrets, wallets, or Database Tools connections.
 
 ---
 
