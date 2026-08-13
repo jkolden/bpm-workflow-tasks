@@ -284,6 +284,9 @@ create or replace PACKAGE BODY pkg_bpm_tasks AS
     BEGIN
         l_url := pkg_bicc_common.gc_fa_base_url || '/bpm/api/4.0/tasks/' || p_task_number;
 
+        -- Clear stale headers so they don't leak into the OAuth token exchange
+        apex_web_service.g_request_headers.DELETE;
+
         l_response := apex_web_service.make_rest_request(
             p_url                  => l_url,
             p_http_method          => 'GET',
@@ -305,10 +308,12 @@ create or replace PACKAGE BODY pkg_bpm_tasks AS
     BEGIN
         l_url := pkg_bicc_common.gc_fa_base_url || '/bpm/api/4.0/tasks/' || p_task_number || '/comments';
 
+        apex_web_service.g_request_headers.DELETE;
+
         l_response := apex_web_service.make_rest_request(
             p_url                  => l_url,
             p_http_method          => 'GET',
-            p_credential_static_id => gc_credential
+            p_credential_static_id => gc_user_credential
         );
 
         RETURN l_response;
@@ -341,7 +346,7 @@ create or replace PACKAGE BODY pkg_bpm_tasks AS
             p_url                  => l_url,
             p_http_method          => 'POST',
             p_body                 => l_body,
-            p_credential_static_id => gc_credential
+            p_credential_static_id => gc_user_credential
         );
 
         IF apex_web_service.g_status_code != 200 THEN
@@ -365,10 +370,12 @@ create or replace PACKAGE BODY pkg_bpm_tasks AS
     BEGIN
         l_url := pkg_bicc_common.gc_fa_base_url || '/bpm/api/4.0/tasks/' || p_task_number || '/attachments';
 
+        apex_web_service.g_request_headers.DELETE;
+
         l_response := apex_web_service.make_rest_request(
             p_url                  => l_url,
             p_http_method          => 'GET',
-            p_credential_static_id => gc_credential
+            p_credential_static_id => gc_user_credential
         );
 
         RETURN l_response;
@@ -447,7 +454,7 @@ create or replace PACKAGE BODY pkg_bpm_tasks AS
             p_url                  => l_url,
             p_http_method          => 'POST',
             p_body_blob            => l_body,
-            p_credential_static_id => gc_credential
+            p_credential_static_id => gc_user_credential
         );
 
         dbms_lob.freetemporary(l_body);
@@ -482,10 +489,12 @@ create or replace PACKAGE BODY pkg_bpm_tasks AS
         l_url := pkg_bicc_common.gc_fa_base_url
               || '/bpm/api/4.0/tasks/' || p_task_number || '/history';
 
+        apex_web_service.g_request_headers.DELETE;
+
         l_response := apex_web_service.make_rest_request(
             p_url                  => l_url,
             p_http_method          => 'GET',
-            p_credential_static_id => gc_credential
+            p_credential_static_id => gc_user_credential
         );
 
         RETURN l_response;
@@ -506,10 +515,12 @@ create or replace PACKAGE BODY pkg_bpm_tasks AS
               || '/hcmRestApi/resources/11.13.18.05/businessProcessNotifications/'
               || p_task_id || '/enclosure/content';
 
+        apex_web_service.g_request_headers.DELETE;
+
         l_response := apex_web_service.make_rest_request(
             p_url                  => l_url,
             p_http_method          => 'GET',
-            p_credential_static_id => gc_credential
+            p_credential_static_id => gc_user_credential
         );
 
         RETURN l_response;
@@ -560,7 +571,7 @@ create or replace PACKAGE BODY pkg_bpm_tasks AS
             p_url                  => l_url,
             p_http_method          => 'POST',
             p_body                 => l_body,
-            p_credential_static_id => gc_credential
+            p_credential_static_id => gc_user_credential
         );
 
         IF apex_web_service.g_status_code NOT IN (200, 201) THEN
@@ -603,7 +614,7 @@ create or replace PACKAGE BODY pkg_bpm_tasks AS
             p_url                  => l_url,
             p_http_method          => 'POST',
             p_body                 => l_body,
-            p_credential_static_id => gc_user_credential  -- must be user cred: API returns EDIT:false for service accounts
+            p_credential_static_id => gc_user_credential
         );
 
         l_can_edit := JSON_VALUE(l_response, '$.result.EDIT');

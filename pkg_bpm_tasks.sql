@@ -7,7 +7,7 @@ create or replace PACKAGE pkg_bpm_tasks AS
 -- =============================================================================
 
     gc_credential      CONSTANT VARCHAR2(50) := 'gcs_reports';
-    gc_user_credential CONSTANT VARCHAR2(50) := 'CONFIGURE_ME'; -- set to Fusion Auth user cred static ID
+    gc_user_credential CONSTANT VARCHAR2(50) := 'APEX_FA_IBZSJB_DEV4_DBMS_CRED'; -- set to Fusion Auth user cred static ID
 
     ---------------------------------------------------------------------------
     -- Refresh bpm_workflow_tasks with all pending tasks (full replace)
