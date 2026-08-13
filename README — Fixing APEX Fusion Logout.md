@@ -19,7 +19,7 @@ Repeat for each APEX app that uses a Fusion auth scheme.
 | Step | Go Here | Do This |
 |---|---|---|
 | **1. Get the redirect URL** | Browser → F12 → Network tab | Check **Preserve log**, click **Sign Out**, find the `userlogout` request to `identity.oraclecloud.com`, copy the full Request URL. |
-| **2. Extract the URI** | From the copied URL | Find the `post_logout_redirect_uri=` parameter and URL-decode it. This is the exact value IDCS must accept. |
+| **2. Extract the URI** | From the copied URL | Find `post_logout_redirect_uri=` at the end of the URL. URL-decode it — that decoded value is what you register in IDCS. See example below. |
 | **3. Open IDCS domain** | OCI Console → Identity & Security → Domains | Select the Fusion identity domain (e.g. `fa-ibzsjb-dev4-oj44w`). |
 | **4. Find the app** | Domains → Integrated applications | Open the confidential app (e.g. `APEX_DEV4_INTEGRATION_APP`). |
 | **5. Edit OAuth config** | Confidential app → OAuth configuration | Click **Edit OAuth configuration**. |
@@ -28,6 +28,24 @@ Repeat for each APEX app that uses a Fusion auth scheme.
 | **8. Test** | APEX app → Sign Out | Should redirect cleanly to the IDCS sign-in page. |
 
 > **The URL must match exactly.** IDCS compares the `post_logout_redirect_uri` APEX sends against the registered list. Trailing slashes, case, and query parameters all matter.
+
+### Step 2 Example
+
+The `userlogout` URL from the Network tab will end with something like:
+
+```text
+...&post_logout_redirect_uri=https%3A%2F%2Fg0bca26b76b6699-freedemo.adb.us-ashburn-1.oraclecloudapps.com%2Fords%2Fr%2Ffreedemo%2Ffa_integ_ibzsjb_test147%2F
+```
+
+URL-decode that value (replace `%3A` → `:`, `%2F` → `/`, etc.) to get:
+
+```text
+https://g0bca26b76b6699-freedemo.adb.us-ashburn-1.oraclecloudapps.com/ords/r/freedemo/fa_integ_ibzsjb_test147/
+```
+
+That decoded URL is what you paste into the IDCS Post-logout redirect URLs field.
+
+> **Tip:** You can paste the encoded URL into the browser address bar and it will decode automatically, or use any URL decoder tool.
 
 ---
 
