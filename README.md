@@ -152,9 +152,9 @@ As of August 2026, the REASSIGN action does not work reliably through either BPM
 - **4.0 single-task endpoint** (`PUT /bpm/api/4.0/tasks/{number}`): Returns error 76012 -- "Identity service cannot get users when identities size crosses limit" -- regardless of user ID format.
 
 **User ID formats tested on 4.0** (all returned the same 76012 error):
-- Username: `jenna.fuchs`
-- Uppercase: `JENNA.FUCHS`
-- Email: `jenna.fuchs@sierra-cedar.com`
+- Username: `jane.doe`
+- Uppercase: `JANE.DOE`
+- Email: `jane.doe@example.com`
 - Display name: `Help Desk User`
 
 **4.0 JSON structure for REASSIGN** (documented but untested successfully):
