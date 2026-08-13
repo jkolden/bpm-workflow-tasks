@@ -572,7 +572,7 @@
              '<span class="btask-title">Notification</span>';
 
         if (fusionUrl) {
-            h += '<a href="' + escHtml(fusionUrl) + '" target="_blank" ' +
+            h += '<a href="' + escHtml(fusionUrl) + '" target="fusion_transaction" ' +
                  'class="btask-fusion-tx-link t-Button t-Button--tiny t-Button--hot" ' +
                  'title="Open transaction in Fusion Redwood">' +
                  '<span class="fa fa-external-link"></span> Open Transaction in Fusion</a>';
@@ -692,6 +692,9 @@
     }
 
     function showError(msg) {
+        if (msg && /invalid url/i.test(msg)) {
+            msg = "Your Fusion session has expired. Please sign out and sign back in.";
+        }
         apex.message.showErrors([{
             type: "error", location: "page", message: msg
         }]);
@@ -750,6 +753,7 @@ function toggleMyTasks(facetItem, value) {
         setFacetFilter(facetItem, value);
     }
 }
+
 
 // Re-label the menu item every time the popup menu opens
 $(document).on("menubeforeopen", function () {
