@@ -692,12 +692,7 @@
     }
 
     function showError(msg) {
-        if (msg && /invalid url/i.test(msg)) {
-            msg = "Your Fusion session has expired. Please sign out and sign back in.";
-        }
-        apex.message.showErrors([{
-            type: "error", location: "page", message: msg
-        }]);
+        window.btask.showError(msg);
     }
 
     function escHtml(s) {
@@ -730,6 +725,26 @@
     }
 
 })();
+
+/* ================================================================== */
+/*  Global btask namespace — shared across pages                       */
+/* ================================================================== */
+window.btask = window.btask || {};
+
+btask.SESSION_EXPIRED_MSG = "Your Fusion session has expired. Please sign out and sign back in.";
+
+btask.isSessionExpiry = function (msg) {
+    return msg && /invalid url/i.test(msg);
+};
+
+btask.showError = function (msg) {
+    if (btask.isSessionExpiry(msg)) {
+        msg = btask.SESSION_EXPIRED_MSG;
+    }
+    apex.message.showErrors([{
+        type: "error", location: "page", message: msg
+    }]);
+};
 
 /* ================================================================== */
 /*  Page-level facet helpers (global scope for DA / button use)        */

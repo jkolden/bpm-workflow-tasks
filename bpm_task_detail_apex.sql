@@ -703,9 +703,24 @@ END;
 -- Credentials are controlled entirely at the package level (gc_user_credential).
 
 /*
+$('#P6003_TITLE_LABEL').removeAttr('for');
+
 (function () {
     var taskNum = $v('P6003_TASK_NUMBER');
     if (!taskNum) return;
+
+    // P6003_ACTION must have a static LOV with at least one dummy entry
+    // (e.g. STATIC:Loading...;) so APEX renders a <select> element.
+    // Our JS replaces the options immediately.
+    var sel = document.getElementById('P6003_ACTION');
+    if (!sel) return;
+
+    var SESSION_EXPIRED_MSG = 'Your Fusion session has expired. Please sign out and sign back in.';
+
+    var showError = function(msg) {
+        if (msg && /invalid url/i.test(msg)) msg = SESSION_EXPIRED_MSG;
+        apex.message.showErrors([{type:"error", location:"page", message: msg}]);
+    };
 
     // Whitelist: only actions we have tested and built payloads for.
     // Intersected with the API actionList so only valid-for-state options appear.
@@ -730,7 +745,7 @@ END;
     // Show/hide the assignee field based on action selection.
     // Auto-populate with the task submitter's Fusion user ID (P6003_FROM_USER_NAME)
     // when INFO_REQUEST is chosen — user can override if needed.
-    apex.item('P6003_ACTION').node.addEventListener('change', function () {
+    sel.addEventListener('change', function () {
         var needsAssignee = {'INFO_REQUEST':1,'DELEGATE':1,'REASSIGN':1}.hasOwnProperty(this.value);
         $('#P6003_ASSIGNEE').closest('.t-Form-fieldContainer')
             .toggle(needsAssignee);
@@ -748,11 +763,14 @@ END;
 
     // Clear immediately so static LOV options don't flash before Ajax returns.
     // Keep one disabled placeholder so the floating label renders correctly while loading.
-    var sel = apex.item('P6003_ACTION').node;
     sel.innerHTML = '<option value="" disabled selected>Select an Action\u2026</option>';
 
     apex.server.process('GET_TASK_ACTIONS', { x01: taskNum }, {
         success: function (data) {
+            if (data.status === 'ERROR') {
+                showError(data.message || 'Error loading actions.');
+                return;
+            }
             if (data.status !== 'OK' || !data.actions || !data.actions.length) return;
 
             // Pin ACQUIRE (Claim) first with a visual separator below it
@@ -779,6 +797,9 @@ END;
                     o.text  = supported[a];
                     sel.appendChild(o);
                 });
+        },
+        error: function () {
+            showError(SESSION_EXPIRED_MSG);
         }
     });
 
@@ -801,9 +822,11 @@ END;
                     if (data.status === 'OK') {
                         apex.navigation.dialog.cancel(true);
                     } else {
-                        apex.message.showErrors([{ type: 'error', location: 'page',
-                            message: data.message || 'Action failed.' }]);
+                        showError(data.message || 'Action failed.');
                     }
+                },
+                error: function () {
+                    showError(SESSION_EXPIRED_MSG);
                 }
             }
         );
