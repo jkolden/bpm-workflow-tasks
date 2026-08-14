@@ -749,14 +749,19 @@ $('#P6003_TITLE_LABEL').removeAttr('for');
 
     // Show/hide the Assignee field.  Only needed for actions that target
     // another user (delegate, reassign, request info).  Pre-fills with
-    // the task submitter's Fusion user ID so the user can just click Submit.
+    // the task submitter's Fusion user ID for Request Information only —
+    // Reassign/Delegate start blank so the user picks the target.
     sel.addEventListener('change', function () {
         var needsAssignee = {'INFO_REQUEST':1,'DELEGATE':1,'REASSIGN':1}.hasOwnProperty(this.value);
         $('#P6003_ASSIGNEE').closest('.t-Form-fieldContainer')
             .toggle(needsAssignee);
         if (needsAssignee) {
-            if (!$v('P6003_ASSIGNEE').trim()) {
+            // Only pre-fill for Request Information (ask the submitter).
+            // Reassign/Delegate should start blank — user picks the target.
+            if (this.value === 'INFO_REQUEST' && !$v('P6003_ASSIGNEE').trim()) {
                 $s('P6003_ASSIGNEE', $v('P6003_FROM_USER_NAME') || '');
+            } else if (this.value !== 'INFO_REQUEST') {
+                $s('P6003_ASSIGNEE', '');
             }
         } else {
             $s('P6003_ASSIGNEE', '');
