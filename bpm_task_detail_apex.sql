@@ -703,6 +703,8 @@ END;
 -- Credentials are controlled entirely at the package level (gc_user_credential).
 
 /*
+// Fix Chrome accessibility warning: P6003_TITLE is Display Only so APEX
+// generates a <label for="P6003_TITLE"> but no matching input element.
 $('#P6003_TITLE_LABEL').removeAttr('for');
 
 (function () {
@@ -710,11 +712,13 @@ $('#P6003_TITLE_LABEL').removeAttr('for');
     if (!taskNum) return;
 
     // P6003_ACTION must have a static LOV with at least one dummy entry
-    // (e.g. STATIC:Loading...;) so APEX renders a <select> element.
-    // Our JS replaces the options immediately.
+    // (e.g. STATIC:Loading...;) so APEX renders a native <select> element.
+    // Without it, getElementById returns null and our dynamic options fail.
     var sel = document.getElementById('P6003_ACTION');
     if (!sel) return;
 
+    // When the Fusion OAuth token expires, REST calls fail with "Invalid URL".
+    // Detect that pattern and show a user-friendly message instead.
     var SESSION_EXPIRED_MSG = 'Your Fusion session has expired. Please sign out and sign back in.';
 
     var showError = function(msg) {
@@ -722,8 +726,9 @@ $('#P6003_TITLE_LABEL').removeAttr('for');
         apex.message.showErrors([{type:"error", location:"page", message: msg}]);
     };
 
-    // Whitelist: only actions we have tested and built payloads for.
-    // Intersected with the API actionList so only valid-for-state options appear.
+    // Whitelist of BPM actions we support.  Keys = API action codes,
+    // values = friendly labels shown in the dropdown.  Only actions
+    // returned by the API AND present here will appear.
     var supported = {
         'ACQUIRE'                : 'Claim',
         'APPROVE'                : 'Approve',
@@ -742,15 +747,14 @@ $('#P6003_TITLE_LABEL').removeAttr('for');
         'WITHDRAW'               : 'Withdraw'
     };
 
-    // Show/hide the assignee field based on action selection.
-    // Auto-populate with the task submitter's Fusion user ID (P6003_FROM_USER_NAME)
-    // when INFO_REQUEST is chosen — user can override if needed.
+    // Show/hide the Assignee field.  Only needed for actions that target
+    // another user (delegate, reassign, request info).  Pre-fills with
+    // the task submitter's Fusion user ID so the user can just click Submit.
     sel.addEventListener('change', function () {
         var needsAssignee = {'INFO_REQUEST':1,'DELEGATE':1,'REASSIGN':1}.hasOwnProperty(this.value);
         $('#P6003_ASSIGNEE').closest('.t-Form-fieldContainer')
             .toggle(needsAssignee);
         if (needsAssignee) {
-            // Pre-fill with submitter's user ID; only override if currently empty
             if (!$v('P6003_ASSIGNEE').trim()) {
                 $s('P6003_ASSIGNEE', $v('P6003_FROM_USER_NAME') || '');
             }
@@ -758,13 +762,16 @@ $('#P6003_TITLE_LABEL').removeAttr('for');
             $s('P6003_ASSIGNEE', '');
         }
     });
-    // Start hidden
+    // Assignee starts hidden; change handler above reveals it when needed.
     $('#P6003_ASSIGNEE').closest('.t-Form-fieldContainer').hide();
 
-    // Clear immediately so static LOV options don't flash before Ajax returns.
-    // Keep one disabled placeholder so the floating label renders correctly while loading.
+    // Replace the static LOV dummy entry with a placeholder while the
+    // Ajax call fetches the real action list from BPM.
     sel.innerHTML = '<option value="" disabled selected>Select an Action\u2026</option>';
 
+    // GET_TASK_ACTIONS: PL/SQL Ajax callback that calls
+    // pkg_bpm_tasks.get_task_actions to retrieve the BPM actionList
+    // for this task.  Returns {status:"OK", actions:["APPROVE",...]}
     apex.server.process('GET_TASK_ACTIONS', { x01: taskNum }, {
         success: function (data) {
             if (data.status === 'ERROR') {
@@ -773,7 +780,8 @@ $('#P6003_TITLE_LABEL').removeAttr('for');
             }
             if (data.status !== 'OK' || !data.actions || !data.actions.length) return;
 
-            // Pin ACQUIRE (Claim) first with a visual separator below it
+            // Pin Claim first with a visual separator — it's the most
+            // common first action (assigns an unowned task to you).
             if (data.actions.indexOf('ACQUIRE') !== -1) {
                 var claim = document.createElement('option');
                 claim.value = 'ACQUIRE';
@@ -787,7 +795,8 @@ $('#P6003_TITLE_LABEL').removeAttr('for');
                 sel.appendChild(sep);
             }
 
-            // Remaining: intersection of API list and our whitelist, sorted alphabetically
+            // Remaining actions: intersect API list with our whitelist,
+            // sort alphabetically, and show friendly labels.
             data.actions
                 .filter(function (a) { return a !== 'ACQUIRE' && supported.hasOwnProperty(a); })
                 .sort()
@@ -803,6 +812,9 @@ $('#P6003_TITLE_LABEL').removeAttr('for');
         }
     });
 
+    // Submit button handler — calls ACTION_TASK PL/SQL Ajax callback
+    // which invokes pkg_bpm_tasks.action_task to POST the action to BPM.
+    // On success, closes the dialog and refreshes the parent task list.
     $(document).on('click', '#P6003_SUBMIT', function () {
         var action     = $v('P6003_ACTION');
         var comment    = $v('P6003_COMMENT') || '';
@@ -820,6 +832,7 @@ $('#P6003_TITLE_LABEL').removeAttr('for');
             {
                 success: function (data) {
                     if (data.status === 'OK') {
+                        // Close dialog with true = tell parent page to refresh
                         apex.navigation.dialog.cancel(true);
                     } else {
                         showError(data.message || 'Action failed.');
