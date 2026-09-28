@@ -86,7 +86,7 @@
     background: var(--ut-component-background-color, #fff);
     border: 2px solid #B35B2D;
     border-radius: 8px;
-    max-width: 700px;
+    max-width: 1000px;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
     overflow: hidden;
 }
@@ -110,6 +110,17 @@
     border: none;
     display: block;
     overflow: hidden;
+}
+
+/* --- Approvers section rendered natively below the iframe --- */
+.btask-notif-approvers {
+    border-top: 2px solid rgba(179, 91, 45, .25);
+    padding-top: 12px;
+    margin-top: 12px;
+}
+
+.btask-notif-approvers .btask-section-title {
+    color: #B35B2D;
 }
 
 /* --- Add-comment form --- */

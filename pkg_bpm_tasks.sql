@@ -3,19 +3,12 @@ create or replace PACKAGE pkg_bpm_tasks AS
 -- PKG_BPM_TASKS  --  Load & act on Fusion BPM workflow tasks via REST
 -- =============================================================================
 -- Endpoint: /bpm/api/4.0/tasks
--- Credential: gcs_reports (APEX Web Credential, Basic Auth to dev4)
+-- Credential: gcs_reports (APEX Web Credential, Basic Auth to dev)
 -- =============================================================================
 
     gc_credential      CONSTANT VARCHAR2(50) := 'gcs_reports';
-    gc_user_credential CONSTANT VARCHAR2(50) := 'APEX_FA_IBZSJB_DEV4_DBMS_CRED'; -- set to Fusion Auth user cred static ID
-
-    ---------------------------------------------------------------------------
-    -- Refresh bpm_workflow_tasks with all pending tasks (full replace)
-    ---------------------------------------------------------------------------
-    PROCEDURE refresh_tasks(
-        p_status     IN VARCHAR2 DEFAULT 'ASSIGNED',
-        p_assignment IN VARCHAR2 DEFAULT 'ADMIN'
-    );
+    gc_user_credential CONSTANT VARCHAR2(50) := 'APEX_FA_IBZSJB_DEV2_DBMS_CRED';
+    gc_base_url        CONSTANT VARCHAR2(200) := 'https://ibzsjb-dev2.fa.ocs.oraclecloud.com';
 
     ---------------------------------------------------------------------------
     -- Act on a task: APPROVE, REJECT, ACQUIRE, REASSIGN, DELEGATE, etc.

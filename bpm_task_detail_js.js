@@ -541,12 +541,14 @@
         $tr.after($notifRow);
         $notifRow.hide().slideDown(200);
 
-        fetchNotifContent(taskId, $notifRow.find(".btask-notif-panel"));
+        var taskNum = $tr.find(".btask-toggle").data("task-number") || "";
+        fetchNotifContent(taskId, taskNum, $notifRow.find(".btask-notif-panel"));
     });
 
-    function fetchNotifContent(taskId, $panel) {
+    function fetchNotifContent(taskId, taskNum, $panel) {
         var dNotif    = $.Deferred(),
-            dDeeplink = $.Deferred();
+            dDeeplink = $.Deferred(),
+            dHistory  = $.Deferred();
 
         apex.server.process("GET_NOTIFICATION_CONTENT", { x01: taskId }, {
             dataType: "json",
@@ -560,12 +562,24 @@
             error:   function ()     { dDeeplink.resolve(""); }
         });
 
-        $.when(dNotif, dDeeplink).done(function (data, fusionUrl) {
-            renderNotifContent(data, fusionUrl, $panel);
+        // Fetch approval history so we can render it natively
+        // (the BIP HTML only has a Fusion placeholder token for approvers)
+        if (taskNum) {
+            apex.server.process("GET_TASK_HISTORY", { x01: String(taskNum) }, {
+                dataType: "json",
+                success: function (data) { dHistory.resolve(data); },
+                error:   function ()     { dHistory.resolve({ status: "ERROR" }); }
+            });
+        } else {
+            dHistory.resolve({ history: [] });
+        }
+
+        $.when(dNotif, dDeeplink, dHistory).done(function (data, fusionUrl, histData) {
+            renderNotifContent(data, fusionUrl, histData, $panel);
         });
     }
 
-    function renderNotifContent(data, fusionUrl, $panel) {
+    function renderNotifContent(data, fusionUrl, histData, $panel) {
         var h = '';
 
         h += '<div class="btask-header btask-header-notif">' +
@@ -592,6 +606,35 @@
             h += '<div class="btask-empty">No notification content available.</div>';
         }
 
+        // Render approval history natively below the iframe.
+        // The BIP HTML contains ORA_REDWOOD_HISTORY_REGION_BIP_TOKEN which
+        // only Fusion's Redwood UI can resolve — we replace it with real data.
+        var history = (histData && histData.history) || [];
+        if (history.length) {
+            var rev = history.slice().reverse();
+            h += '<div class="btask-section btask-notif-approvers">';
+            h += '<div class="btask-section-title">Approvers</div>';
+            h += '<div class="btask-history-list">';
+            for (var k = 0; k < rev.length; k++) {
+                var hi = rev[k];
+                var stateClass = hi.state === 'Future participant'
+                    ? ' btask-history-future' : '';
+                h += '<div class="btask-history-entry' + stateClass + '">' +
+                     '<div class="btask-history-who">' +
+                     escHtml(hi.displayName || hi.userId) +
+                     (hi.actionName ? ' <span class="btask-history-action">' +
+                     escHtml(hi.actionName) + '</span>' : '') +
+                     '</div>' +
+                     '<div class="btask-history-detail">' +
+                     (hi.state ? '<span class="btask-history-state">' +
+                     escHtml(hi.state) + '</span>' : '') +
+                     (hi.reason ? ' &mdash; ' + escHtml(hi.reason) : '') +
+                     (hi.updatedDate ? ' &mdash; ' + escHtml(hi.updatedDate) : '') +
+                     '</div></div>';
+            }
+            h += '</div></div>';
+        }
+
         h += '</div>';
 
         $panel.html(h);
@@ -603,10 +646,37 @@
             $iframe.on("load", function () {
                 try {
                     var doc = this.contentDocument || this.contentWindow.document;
+                    // Remove the "Show Detail" link — its onclick can't run in
+                    // a sandboxed iframe and href="#" navigates to the parent app
+                    var showDetailLink = doc.getElementById("BIP_NOTIF_discloseHref");
+                    if (showDetailLink) {
+                        showDetailLink.parentNode.removeChild(showDetailLink);
+                    }
+                    // Remove the Fusion-only Approvers placeholder and everything
+                    // after it inside the iframe — we render approvers natively
+                    var allText = doc.body.innerHTML;
+                    var tokenIdx = allText.indexOf("ORA_REDWOOD_HISTORY_REGION_BIP_TOKEN");
+                    if (tokenIdx !== -1) {
+                        // Find the parent element containing the token and hide it
+                        var walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT, null, false);
+                        while (walker.nextNode()) {
+                            if (walker.currentNode.nodeValue.indexOf("ORA_REDWOOD_HISTORY_REGION_BIP_TOKEN") !== -1) {
+                                // Hide the containing section (walk up to find a reasonable parent)
+                                var el = walker.currentNode.parentNode;
+                                while (el && el !== doc.body && el.tagName !== "TABLE" && el.tagName !== "DIV") {
+                                    el = el.parentNode;
+                                }
+                                if (el && el !== doc.body) {
+                                    el.style.display = "none";
+                                }
+                                break;
+                            }
+                        }
+                    }
                     var ch = doc.documentElement.scrollHeight || doc.body.scrollHeight;
-                    $iframe.css("height", (ch + 20) + "px");
+                    $(this).css("height", (ch + 20) + "px");
                 } catch (ex) {
-                    $iframe.css("height", "auto");
+                    $(this).css("height", "auto");
                 }
             });
         }

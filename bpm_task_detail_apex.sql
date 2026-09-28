@@ -28,125 +28,136 @@
 
 /*
 SELECT '<button type="button" class="btask-toggle"
-               data-task-number="' || task_number || '"
-               data-task-state="' || state || '"
-               data-task-id="' || NVL(task_id, '') || '"
+               data-task-number="' || t.task_number || '"
+               data-task-state="' || t.state || '"
+               data-task-id="' || NVL(t.task_id, '') || '"
                aria-label="Task Details">
          <span class="fa fa-folder-o"></span>
        </button>' AS detail_toggle,
        '<button type="button" class="btask-history-toggle"
-               data-task-number="' || task_number || '"
+               data-task-number="' || t.task_number || '"
                aria-label="Approval History">
          <span class="fa fa-clock-o"></span>
        </button>' AS history_toggle,
-       CASE WHEN task_id IS NOT NULL THEN
+       CASE WHEN t.task_id IS NOT NULL THEN
            '<button type="button" class="btask-notif-toggle"'
-           || ' data-task-id="' || task_id || '"'
+           || ' data-task-id="' || t.task_id || '"'
            || ' aria-label="Notification Content">'
            || '<span class="fa fa-file-text-o"></span></button>'
        END AS notif_toggle,
-       CASE WHEN task_id IS NOT NULL THEN
+       CASE WHEN t.task_id IS NOT NULL THEN
            '<a href="javascript:void(0)" class="bpm-fusion-link"'
-           || ' data-task-id="' || task_id || '"'
+           || ' data-task-id="' || t.task_id || '"'
            || ' title="View in Fusion">'
            || '<span class="fa fa-external-link"></span></a>'
        END AS fusion_link,
        CASE
-           WHEN last_action IS NULL THEN NULL
-           ELSE '<span class="btask-la btask-la-' || LOWER(NVL(last_action_status, 'ok')) || '"'
-             || ' title="' || TO_CHAR(last_action_ts, 'MM/DD/YY HH24:MI')
-             || CASE WHEN last_action_response IS NOT NULL
-                     THEN '&#10;' || last_action_response END
+           WHEN t.last_action IS NULL THEN NULL
+           ELSE '<span class="btask-la btask-la-' || LOWER(NVL(t.last_action_status, 'ok')) || '"'
+             || ' title="' || TO_CHAR(t.last_action_ts, 'MM/DD/YY HH24:MI')
+             || CASE WHEN t.last_action_response IS NOT NULL
+                     THEN '&#10;' || t.last_action_response END
              || '">'
-             || INITCAP(REPLACE(last_action, '_', ' '))
+             || INITCAP(REPLACE(t.last_action, '_', ' '))
              || '</span>'
        END AS last_action_html,
-       task_number,
-       TO_CHAR(task_number) AS task_number_vc,
-       title,
+       t.task_number,
+       TO_CHAR(t.task_number) AS task_number_vc,
+       t.title,
        INITCAP(REPLACE(
-           REGEXP_REPLACE(task_def_name, '([a-z])([A-Z])', '\1 \2'),
+           REGEXP_REPLACE(t.task_def_name, '([a-z])([A-Z])', '\1 \2'),
            'Approval', '')) AS task_type,
-       category,
-       assignee_id,
-       assignee_type,
-       created_by,
-       from_user_display   AS submitted_by,
-       assigned_ts,
-       ROUND(SYSDATE - CAST(assigned_ts AS DATE)) AS days_pending,
-       priority,
-       state,
-       identification_key,
-       last_action,
-       last_action_ts,
-       last_action_status,
-       last_action_response,
-       from_user_name,
+       t.category,
+       t.assignee_id,
+       t.assignee_type,
+       t.created_by,
+       t.from_user_display   AS submitted_by,
+       t.assigned_ts,
+       TO_CHAR(t.assigned_ts, 'Mon DD, YYYY') AS assigned_display,
+       ROUND(SYSDATE - CAST(t.assigned_ts AS DATE)) AS days_pending,
+       t.priority,
+       t.state,
+       t.identification_key,
+       t.last_action,
+       t.last_action_ts,
+       t.last_action_status,
+       t.last_action_response,
+       t.from_user_name,
+       e.location_name,
        APEX_UTIL.PREPARE_URL(
            'f?p=' || :APP_ID || ':6003:' || :APP_SESSION ||
            '::NO:6003:P6003_TASK_NUMBER,P6003_FROM_USER_NAME:' ||
-           task_number || ',' || from_user_name
+           t.task_number || ',' || t.from_user_name
        ) AS actions_url,
        '<span class="task-state task-state--'
-           || REPLACE(state,' ','_')
+           || REPLACE(t.state,' ','_')
            || '">'
-           || INITCAP(REPLACE(state,'_',' '))
+           || INITCAP(REPLACE(t.state,'_',' '))
            || '</span>' AS state_html,
        CASE
-           WHEN ROUND(SYSDATE - CAST(assigned_ts AS DATE)) < 14 THEN 'fresh'
-           WHEN ROUND(SYSDATE - CAST(assigned_ts AS DATE)) < 30 THEN 'warning'
-           WHEN ROUND(SYSDATE - CAST(assigned_ts AS DATE)) < 90 THEN 'old'
+           WHEN ROUND(SYSDATE - CAST(t.assigned_ts AS DATE)) < 14 THEN 'fresh'
+           WHEN ROUND(SYSDATE - CAST(t.assigned_ts AS DATE)) < 30 THEN 'warning'
+           WHEN ROUND(SYSDATE - CAST(t.assigned_ts AS DATE)) < 90 THEN 'old'
            ELSE 'stale'
        END AS age_class,
        CASE
-           WHEN from_user_display IS NULL THEN 'is-hidden'
+           WHEN ROUND(SYSDATE - CAST(t.assigned_ts AS DATE)) < 14 THEN '< 14 Days'
+           WHEN ROUND(SYSDATE - CAST(t.assigned_ts AS DATE)) < 30 THEN '14-29 Days'
+           WHEN ROUND(SYSDATE - CAST(t.assigned_ts AS DATE)) < 90 THEN '30-89 Days'
+           ELSE '90+ Days'
+       END AS aging_bucket,
+       TO_CHAR(t.assigned_ts, 'YYYY-MM') AS effective_month,
+       CASE
+           WHEN t.from_user_display IS NULL THEN 'is-hidden'
        END AS submitted_class,
        CASE
-           WHEN assignee_id IS NULL THEN 'is-hidden'
+           WHEN t.assignee_id IS NULL THEN 'is-hidden'
        END AS assignee_class,
        CASE
-           WHEN from_user_display IS NULL
-             OR assignee_id IS NULL
+           WHEN t.from_user_display IS NULL
+             OR t.assignee_id IS NULL
            THEN 'is-hidden'
        END AS people_separator_class,
        CASE
-           WHEN from_user_display IS NULL
-            AND assignee_id IS NULL
+           WHEN t.from_user_display IS NULL
+            AND t.assignee_id IS NULL
            THEN 'is-hidden'
        END AS age_separator_class,
        CASE
            WHEN NULLIF(TRIM(INITCAP(REPLACE(
-               REGEXP_REPLACE(task_def_name, '([a-z])([A-Z])', '\1 \2'),
+               REGEXP_REPLACE(t.task_def_name, '([a-z])([A-Z])', '\1 \2'),
                'Approval', ''))), '') IS NULL
            THEN 'is-hidden'
        END AS task_type_class,
        CASE
-           WHEN category IS NULL THEN 'is-hidden'
+           WHEN t.category IS NULL THEN 'is-hidden'
        END AS category_class,
        CASE
            WHEN NULLIF(TRIM(INITCAP(REPLACE(
-               REGEXP_REPLACE(task_def_name, '([a-z])([A-Z])', '\1 \2'),
+               REGEXP_REPLACE(t.task_def_name, '([a-z])([A-Z])', '\1 \2'),
                'Approval', ''))), '') IS NULL
-             OR category IS NULL
+             OR t.category IS NULL
            THEN 'is-hidden'
        END AS task_category_separator_class,
        CASE
            WHEN NULLIF(TRIM(INITCAP(REPLACE(
-               REGEXP_REPLACE(task_def_name, '([a-z])([A-Z])', '\1 \2'),
+               REGEXP_REPLACE(t.task_def_name, '([a-z])([A-Z])', '\1 \2'),
                'Approval', ''))), '') IS NULL
-            AND category IS NULL
+            AND t.category IS NULL
            THEN 'is-hidden'
        END AS before_task_info_separator_class,
-       CASE WHEN state IN ('COMPLETED', 'WITHDRAWN')
+       CASE WHEN t.state IN ('COMPLETED', 'WITHDRAWN')
             THEN 'is-disabled' END AS action_css,
-       CASE WHEN last_action IS NOT NULL AND last_action_status = 'OK' THEN
-           INITCAP(last_action)
-           || CASE WHEN last_action_ts IS NOT NULL
+       CASE WHEN t.last_action IS NOT NULL AND t.last_action_status = 'OK' THEN
+           INITCAP(t.last_action)
+           || CASE WHEN t.last_action_ts IS NOT NULL
                    THEN ' &middot; ' || TO_CHAR(
-                       FROM_TZ(last_action_ts, 'UTC') AT TIME ZONE 'US/Eastern',
+                       FROM_TZ(t.last_action_ts, 'UTC') AT TIME ZONE 'US/Eastern',
                        'Mon DD, YYYY HH:MI:SS AM') END
        END AS last_action_summary
-  FROM bpm_workflow_tasks
+  FROM bpm_workflow_tasks t
+  LEFT JOIN hcm_employee_bc e ON e.person_id = t.person_id
+ WHERE t.category IS NULL OR t.category NOT IN ('Purchasing','Purchase Requisitions')
 */
 
 -- =============================================================================

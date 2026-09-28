@@ -1,148 +1,6 @@
 create or replace PACKAGE BODY pkg_bpm_tasks AS
 
     -- =========================================================================
-    -- REFRESH_TASKS  --  Incremental refresh of bpm_workflow_tasks via BPM REST
-    -- Orders by updatedDate desc and stops paging once we reach tasks
-    -- already synced.  First run (empty table) fetches everything.
-    -- =========================================================================
-
-    PROCEDURE refresh_tasks(
-        p_status     IN VARCHAR2 DEFAULT 'ASSIGNED',
-        p_assignment IN VARCHAR2 DEFAULT 'ADMIN'
-    ) IS
-        l_url          VARCHAR2(1000);
-        l_response     CLOB;
-        l_offset       NUMBER := 0;
-        c_limit        CONSTANT NUMBER := 100;
-        l_has_more     VARCHAR2(10);
-        l_total        NUMBER := 0;
-        l_page_rows    NUMBER;
-        l_last_sync    TIMESTAMP(6);
-        l_min_updated  TIMESTAMP(6);
-    BEGIN
-        -- Most recent updatedDate we already have (NULL on first run)
-        SELECT MAX(updated_ts) INTO l_last_sync FROM bpm_workflow_tasks;
-
-        LOOP
-            l_url := pkg_bicc_common.gc_fa_base_url || '/bpm/api/4.0/tasks'
-                  || '?assignment=' || p_assignment
-                  || '&status=ASSIGNED'
-                  || '&status=COMPLETED'
-                  || '&status=WITHDRAWN'
-                  || '&status=EXPIRED'
-                  || '&status=ERRORED'
-                  || '&status=SUSPENDED'
-                  || '&status=INFO_REQUESTED'
-                  || '&status=ALERTED'
-                  || '&status=OUTCOME_UPDATED'
-                  || '&orderBy=updatedDate:desc'
-                  || '&limit='  || c_limit
-                  || '&offset=' || l_offset;
-
-            l_response := apex_web_service.make_rest_request(
-                p_url                  => l_url,
-                p_http_method          => 'GET',
-                p_credential_static_id => gc_credential
-            );
-
-            -- Find the oldest updatedDate in this page
-            SELECT MIN(TO_TIMESTAMP(j.updated_date, 'YYYY-MM-DD HH24:MI:SS'))
-              INTO l_min_updated
-              FROM JSON_TABLE(l_response, '$.items[*]' COLUMNS (
-                  updated_date VARCHAR2(50) PATH '$.updatedDate'
-              )) j;
-
-            -- Empty page — nothing returned
-            EXIT WHEN l_min_updated IS NULL;
-
-            MERGE INTO bpm_workflow_tasks t
-            USING (
-                SELECT
-                    j.task_number, j.task_id, j.title, j.task_def_name, j.category,
-                    j.state, j.priority, j.assignee_id, j.assignee_type,
-                    j.created_by,
-                    TO_TIMESTAMP(j.created_date,  'YYYY-MM-DD HH24:MI:SS') AS created_ts,
-                    TO_TIMESTAMP(j.assigned_date, 'YYYY-MM-DD HH24:MI:SS') AS assigned_ts,
-                    TO_TIMESTAMP(j.updated_date,  'YYYY-MM-DD HH24:MI:SS') AS updated_ts,
-                    j.from_user_name, j.from_user_display, j.owner_user,
-                    j.identification_key, j.approval_duration
-                FROM JSON_TABLE(l_response, '$.items[*]' COLUMNS (
-                    task_number       NUMBER         PATH '$.number',
-                    task_id           VARCHAR2(64)   PATH '$.taskId',
-                    title             VARCHAR2(500)  PATH '$.title',
-                    task_def_name     VARCHAR2(200)  PATH '$.taskDefinitionName',
-                    category          VARCHAR2(200)  PATH '$.category',
-                    state             VARCHAR2(50)   PATH '$.state',
-                    priority          NUMBER         PATH '$.priority',
-                    assignee_id       VARCHAR2(200)  PATH '$.assignees.items[0].id',
-                    assignee_type     VARCHAR2(50)   PATH '$.assignees.items[0].type',
-                    created_by        VARCHAR2(200)  PATH '$.createdBy',
-                    created_date      VARCHAR2(50)   PATH '$.createdDate',
-                    assigned_date     VARCHAR2(50)   PATH '$.assignedDate',
-                    updated_date      VARCHAR2(50)   PATH '$.updatedDate',
-                    from_user_name    VARCHAR2(200)  PATH '$.fromUserName',
-                    from_user_display VARCHAR2(200)  PATH '$.fromUserDisplayName',
-                    owner_user        VARCHAR2(200)  PATH '$.ownerUser',
-                    identification_key VARCHAR2(200) PATH '$.identificationKey',
-                    approval_duration NUMBER         PATH '$.approvalDuration'
-                )) j
-            ) s ON (t.task_number = s.task_number)
-            WHEN MATCHED THEN UPDATE SET
-                t.task_id            = s.task_id,
-                t.title              = s.title,
-                t.task_def_name      = s.task_def_name,
-                t.category           = s.category,
-                t.state              = s.state,
-                t.priority           = s.priority,
-                t.assignee_id        = s.assignee_id,
-                t.assignee_type      = s.assignee_type,
-                t.created_by         = s.created_by,
-                t.created_ts         = s.created_ts,
-                t.assigned_ts        = s.assigned_ts,
-                t.updated_ts         = s.updated_ts,
-                t.from_user_name     = s.from_user_name,
-                t.from_user_display  = s.from_user_display,
-                t.owner_user         = s.owner_user,
-                t.identification_key = s.identification_key,
-                t.approval_duration  = s.approval_duration,
-                t.refreshed_ts       = SYSTIMESTAMP
-            WHEN NOT MATCHED THEN INSERT (
-                task_number, task_id, title, task_def_name, category,
-                state, priority, assignee_id, assignee_type,
-                created_by, created_ts, assigned_ts, updated_ts,
-                from_user_name, from_user_display, owner_user,
-                identification_key, approval_duration
-            ) VALUES (
-                s.task_number, s.task_id, s.title, s.task_def_name, s.category,
-                s.state, s.priority, s.assignee_id, s.assignee_type,
-                s.created_by, s.created_ts, s.assigned_ts, s.updated_ts,
-                s.from_user_name, s.from_user_display, s.owner_user,
-                s.identification_key, s.approval_duration
-            );
-
-            l_page_rows := SQL%ROWCOUNT;
-            l_total     := l_total + l_page_rows;
-
-            -- If the oldest task in this page predates our watermark, we've
-            -- caught up.  Use < (not <=) so tasks sharing the exact same
-            -- updatedDate on a page boundary are not skipped.
-            EXIT WHEN l_last_sync IS NOT NULL
-                  AND l_min_updated < l_last_sync;
-
-            l_has_more := JSON_VALUE(l_response, '$.hasMore');
-            EXIT WHEN l_has_more != 'true';
-            EXIT WHEN l_offset > 10000;   -- safety cap
-
-            l_offset := l_offset + c_limit;
-        END LOOP;
-
-        COMMIT;
-
-        DBMS_OUTPUT.PUT_LINE('Refreshed ' || l_total || ' workflow tasks.');
-    END refresh_tasks;
-
-
-    -- =========================================================================
     -- ACTION_TASK  --  Approve / Reject / Acquire / Reassign a BPM task
     -- =========================================================================
 
@@ -166,7 +24,7 @@ create or replace PACKAGE BODY pkg_bpm_tasks AS
         -- INFO_SUBMIT uses 4.0 endpoint, no identities (routes back to requester);
         -- other actions (APPROVE, REJECT, etc.) use 3.0 bulk endpoint
         IF UPPER(p_action) IN ('ACQUIRE', 'SKIP_CURRENT_ASSIGNMENT') THEN
-            l_url := pkg_bicc_common.gc_fa_base_url
+            l_url := gc_base_url
                   || '/bpm/api/4.0/tasks/' || p_task_number;
 
             l_body := '{"action":{"id":"' || UPPER(p_action) || '"}}';
@@ -176,7 +34,7 @@ create or replace PACKAGE BODY pkg_bpm_tasks AS
             -- 4.0 single-task endpoint; identities at top level (not inside action).
             -- comment object is included inline when provided — appears in task
             -- comments (not history). Tested: 200 received; verify via /comments.
-            l_url  := pkg_bicc_common.gc_fa_base_url
+            l_url  := gc_base_url
                    || '/bpm/api/4.0/tasks/' || p_task_number;
             l_body := '{"action":{"id":"INFO_REQUEST"}'
                    || ',"identities":[{"id":"'
@@ -195,7 +53,7 @@ create or replace PACKAGE BODY pkg_bpm_tasks AS
         ELSIF UPPER(p_action) = 'INFO_SUBMIT' THEN
             -- 4.0 single-task endpoint; no identities needed — routes back to requester.
             -- Action ID confirmed from Oracle BPM API docs.
-            l_url  := pkg_bicc_common.gc_fa_base_url
+            l_url  := gc_base_url
                    || '/bpm/api/4.0/tasks/' || p_task_number;
 
             l_body := '{"action":{"id":"INFO_SUBMIT"}';
@@ -209,7 +67,7 @@ create or replace PACKAGE BODY pkg_bpm_tasks AS
             l_body := l_body || '}';
 
         ELSE
-            l_url := pkg_bicc_common.gc_fa_base_url || '/bpm/api/3.0/tasks';
+            l_url := gc_base_url || '/bpm/api/3.0/tasks';
 
             l_body := '{"tasks":["' || TO_CHAR(p_task_number) || '"]'
                    || ',"action":{"id":"' || UPPER(p_action) || '"}';
@@ -249,6 +107,7 @@ create or replace PACKAGE BODY pkg_bpm_tasks AS
         -- On error store a truncated snippet for debugging.
         UPDATE bpm_workflow_tasks
            SET last_action          = UPPER(p_action),
+               last_action_by       = COALESCE(V('APP_USER'), USER),
                last_action_ts       = SYSTIMESTAMP,
                last_action_status   = CASE WHEN l_status = 200 THEN 'OK' ELSE 'ERROR' END,
                last_action_response = CASE WHEN l_status = 200
@@ -264,6 +123,7 @@ create or replace PACKAGE BODY pkg_bpm_tasks AS
             l_errmsg := SQLERRM;
             UPDATE bpm_workflow_tasks
                SET last_action          = UPPER(p_action),
+                   last_action_by       = COALESCE(V('APP_USER'), USER),
                    last_action_ts       = SYSTIMESTAMP,
                    last_action_status   = 'ERROR',
                    last_action_response = l_errmsg
@@ -282,7 +142,7 @@ create or replace PACKAGE BODY pkg_bpm_tasks AS
         l_url      VARCHAR2(1000);
         l_response CLOB;
     BEGIN
-        l_url := pkg_bicc_common.gc_fa_base_url || '/bpm/api/4.0/tasks/' || p_task_number;
+        l_url := gc_base_url || '/bpm/api/4.0/tasks/' || p_task_number;
 
         -- Clear stale headers so they don't leak into the OAuth token exchange
         apex_web_service.g_request_headers.DELETE;
@@ -306,7 +166,7 @@ create or replace PACKAGE BODY pkg_bpm_tasks AS
         l_url      VARCHAR2(1000);
         l_response CLOB;
     BEGIN
-        l_url := pkg_bicc_common.gc_fa_base_url || '/bpm/api/4.0/tasks/' || p_task_number || '/comments';
+        l_url := gc_base_url || '/bpm/api/4.0/tasks/' || p_task_number || '/comments';
 
         apex_web_service.g_request_headers.DELETE;
 
@@ -332,7 +192,7 @@ create or replace PACKAGE BODY pkg_bpm_tasks AS
         l_body     VARCHAR2(4000);
         l_response CLOB;
     BEGIN
-        l_url := pkg_bicc_common.gc_fa_base_url || '/bpm/api/3.0/tasks/' || p_task_number || '/comments';
+        l_url := gc_base_url || '/bpm/api/3.0/tasks/' || p_task_number || '/comments';
 
         l_body := '{"commentStr":"' || apex_escape.json(p_comment) || '"}';
 
@@ -368,7 +228,7 @@ create or replace PACKAGE BODY pkg_bpm_tasks AS
         l_url      VARCHAR2(1000);
         l_response CLOB;
     BEGIN
-        l_url := pkg_bicc_common.gc_fa_base_url || '/bpm/api/4.0/tasks/' || p_task_number || '/attachments';
+        l_url := gc_base_url || '/bpm/api/4.0/tasks/' || p_task_number || '/attachments';
 
         apex_web_service.g_request_headers.DELETE;
 
@@ -441,7 +301,7 @@ create or replace PACKAGE BODY pkg_bpm_tasks AS
         append_text(l_body, '--' || l_boundary || '--' || l_crlf);
 
         -- Headers + POST
-        l_url := pkg_bicc_common.gc_fa_base_url || '/bpm/api/3.0/tasks/' || p_task_number || '/attachments';
+        l_url := gc_base_url || '/bpm/api/3.0/tasks/' || p_task_number || '/attachments';
 
         apex_web_service.g_request_headers.DELETE;
         apex_web_service.g_request_headers(1).name  := 'Content-Type';
@@ -486,7 +346,7 @@ create or replace PACKAGE BODY pkg_bpm_tasks AS
         l_url      VARCHAR2(1000);
         l_response CLOB;
     BEGIN
-        l_url := pkg_bicc_common.gc_fa_base_url
+        l_url := gc_base_url
               || '/bpm/api/4.0/tasks/' || p_task_number || '/history';
 
         apex_web_service.g_request_headers.DELETE;
@@ -511,7 +371,7 @@ create or replace PACKAGE BODY pkg_bpm_tasks AS
         l_url      VARCHAR2(1000);
         l_response CLOB;
     BEGIN
-        l_url := pkg_bicc_common.gc_fa_base_url
+        l_url := gc_base_url
               || '/hcmRestApi/resources/11.13.18.05/businessProcessNotifications/'
               || p_task_id || '/enclosure/content';
 
@@ -544,7 +404,7 @@ create or replace PACKAGE BODY pkg_bpm_tasks AS
         l_body     VARCHAR2(4000);
         l_response CLOB;
     BEGIN
-        l_url := pkg_bicc_common.gc_fa_base_url || '/bpm/api/3.0/tasks/todoTask';
+        l_url := gc_base_url || '/bpm/api/3.0/tasks/todoTask';
 
         l_body := '{"title":"' || apex_escape.json(p_title) || '"'
                || ',"priority":"' || p_priority || '"'
@@ -598,7 +458,7 @@ create or replace PACKAGE BODY pkg_bpm_tasks AS
         l_response CLOB;
         l_can_edit VARCHAR2(10);
     BEGIN
-        l_url := pkg_bicc_common.gc_fa_base_url
+        l_url := gc_base_url
               || '/hcmRestApi/resources/11.13.18.05/businessProcessNotifications'
               || '/action/getDeeplinkUrlForEditAction';
 
